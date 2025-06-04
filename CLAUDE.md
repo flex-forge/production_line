@@ -32,19 +32,19 @@ pio run -e blues_cygnet -t clean
 
 ### Core Components
 1. **Main Loop** (`conveyor_monitor.ino`): Orchestrates sensor reading, data processing, and cloud sync
-2. **Sensor Manager**: Hardware abstraction layer for all I2C sensors
+2. **Sensor Manager**: Hardware abstraction layer for all I2C sensors including Seesaw encoder
 3. **Data Processor**: Implements anomaly detection algorithms
 4. **Notecard Manager**: Handles cellular IoT communication
 5. **Alert Handler**: Manages alert generation and routing
 
 ### Key Design Patterns
-- Non-blocking sensor reads with configurable intervals
+- Non-blocking I2C sensor reads with configurable intervals
 - Circular buffers for vibration analysis
 - State-based alert management with deduplication
 - Adaptive sync rates based on system state
 
 ### Critical Timing
-- Encoder ISR: Hardware interrupt for pulse counting
+- Encoder reading: I2C polling at 10Hz (100ms intervals)
 - Vibration sampling: 100Hz for FFT analysis
 - Cloud sync: 1 minute normal, immediate for alerts
 
@@ -70,8 +70,8 @@ Edit values in `config.h`:
 
 ## Important Considerations
 
-- The rotary encoder uses hardware interrupts on pin 2
-- All sensors communicate via I2C at 400kHz
+- The rotary encoder uses Adafruit Seesaw over I2C (address 0x36)
+- All sensors communicate via I2C at 400kHz using Qwiic connectors
 - Notecard requires proper ProductUID configuration
 - Gesture sensor needs adequate LED power for reliable detection
 - Memory constraints: Avoid dynamic allocation, use fixed buffers

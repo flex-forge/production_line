@@ -15,9 +15,11 @@
 #define LSM9DS1_AG_I2C_ADDR     0x6B    // Accel/Gyro
 #define LSM9DS1_M_I2C_ADDR      0x1E    // Magnetometer
 #define APDS9960_I2C_ADDR       0x39    // Gesture sensor
+#define SEESAW_I2C_ADDR         0x36    // Rotary encoder (Adafruit Seesaw)
 
 // Conveyor parameters
-#define ENCODER_PULSES_PER_REV   20      // Rotary encoder resolution
+#define SEESAW_ENCODER_MODULE    1       // Seesaw encoder module number
+#define ENCODER_PULSES_PER_REV   24      // Seesaw encoder resolution (24 detents)
 #define CONVEYOR_GEAR_RATIO      5.0     // Motor to belt ratio
 #define NOMINAL_SPEED_RPM        60.0    // Expected conveyor speed
 #define MIN_SPEED_THRESHOLD      5.0     // Below this = stopped
@@ -91,7 +93,7 @@ struct SystemState {
 struct SensorReadings {
   // Encoder
   float encoderSpeed;
-  unsigned long encoderPulses;
+  int32_t encoderPulses;
   
   // ToF
   uint16_t distance_mm;

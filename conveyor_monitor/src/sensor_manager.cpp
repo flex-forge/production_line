@@ -4,30 +4,23 @@
 #include <VL53L1X.h>
 #include <SparkFunLSM9DS1.h>
 #include <SparkFun_APDS9960.h>
+#include <Adafruit_seesaw.h>
 
 // Variable to track last part detection state
 static bool lastPartDetected = false;
-
-// Global instance pointer for ISR
-SensorManager* sensorManagerInstance = nullptr;
 
 // Sensor objects
 Adafruit_BME680 bme;
 VL53L1X distanceSensor;
 LSM9DS1 imu;
 SparkFun_APDS9960 gestureSensor;
+Adafruit_seesaw seesaw;
 
-// Encoder ISR
-void encoderISRHandler() {
-  if (sensorManagerInstance) {
-    sensorManagerInstance->encoderISR();
-  }
-}
 
 SensorManager::SensorManager() {
-  encoderPulseCount = 0;
+  encoderPosition = 0;
+  lastEncoderPosition = 0;
   lastEncoderTime = 0;
-  lastPulseCount = 0;
   currentSpeed_rpm = 0.0;
   lastPartDetectTime = 0;
   partCount = 0;
@@ -36,16 +29,17 @@ SensorManager::SensorManager() {
   vibrationMagnitude = 0.0;
   lastGesture = GESTURE_NONE;
   lastGestureTime = 0;
-  sensorManagerInstance = this;
 }
 
 bool SensorManager::begin() {
   Serial.println(F("Initializing sensors..."));
   
-  // Initialize encoder
-  initializeEncoder();
-  
   // Initialize I2C sensors
+  if (!initializeSeesaw()) {
+    Serial.println(F("Seesaw encoder init failed"));
+    return false;
+  }
+  
   if (!initializeBME688()) {
     Serial.println(F("BME688 init failed"));
     return false;
@@ -70,11 +64,30 @@ bool SensorManager::begin() {
   return true;
 }
 
-void SensorManager::initializeEncoder() {
-  // Configure encoder pin as input with pullup
-  pinMode(2, INPUT_PULLUP); // Assuming encoder on pin 2
-  attachInterrupt(digitalPinToInterrupt(2), encoderISRHandler, RISING);
+bool SensorManager::initializeSeesaw() {
+  if (!seesaw.begin(SEESAW_I2C_ADDR)) {
+    return false;
+  }
+  
+  // Get product info to verify correct Seesaw board
+  uint32_t version = ((uint32_t)seesaw.getVersion() >> 16) & 0xFFFF;
+  if (version != 4991) { // Check for rotary encoder product ID
+    Serial.println(F("Wrong Seesaw product detected"));
+    return false;
+  }
+  
+  // Configure encoder module
+  seesaw.pinMode(24, INPUT_PULLUP); // Button pin
+  seesaw.setGPIOInterrupts((uint32_t)1 << 24, 1);
+  seesaw.enableEncoderInterrupt();
+  
+  // Reset encoder position
+  seesaw.setEncoderPosition(0);
+  encoderPosition = 0;
+  lastEncoderPosition = 0;
   lastEncoderTime = millis();
+  
+  return true;
 }
 
 bool SensorManager::initializeBME688() {
@@ -151,20 +164,32 @@ void SensorManager::readAll() {
 }
 
 void SensorManager::readEncoder() {
+  // Read current encoder position
+  encoderPosition = seesaw.getEncoderPosition();
+  
   unsigned long currentTime = millis();
   unsigned long timeDiff = currentTime - lastEncoderTime;
   
   if (timeDiff >= 1000) { // Calculate speed every second
-    unsigned long pulseDiff = encoderPulseCount - lastPulseCount;
+    int32_t positionDiff = encoderPosition - lastEncoderPosition;
+    
+    // Handle wraparound
+    if (abs(positionDiff) > 32768) {
+      if (positionDiff > 0) {
+        positionDiff -= 65536;
+      } else {
+        positionDiff += 65536;
+      }
+    }
     
     // Calculate RPM: (pulses/sec) * 60 / (pulses/rev) / gear_ratio
-    currentSpeed_rpm = (pulseDiff * 60000.0) / (timeDiff * ENCODER_PULSES_PER_REV * CONVEYOR_GEAR_RATIO);
+    currentSpeed_rpm = (abs(positionDiff) * 60000.0) / (timeDiff * ENCODER_PULSES_PER_REV * CONVEYOR_GEAR_RATIO);
     
-    lastPulseCount = encoderPulseCount;
+    lastEncoderPosition = encoderPosition;
     lastEncoderTime = currentTime;
     
     currentReadings.encoderSpeed = currentSpeed_rpm;
-    currentReadings.encoderPulses = encoderPulseCount;
+    currentReadings.encoderPulses = encoderPosition;
   }
 }
 
@@ -293,8 +318,8 @@ bool SensorManager::checkSensorHealth() {
   // Check if we're getting readings from all sensors
   bool healthy = true;
   
-  // Check if encoder is responding (should have pulses if running)
-  if (currentSpeed_rpm > MIN_SPEED_THRESHOLD && encoderPulseCount == lastPulseCount) {
+  // Check if encoder is responding (should have position changes if running)
+  if (currentSpeed_rpm > MIN_SPEED_THRESHOLD && encoderPosition == lastEncoderPosition) {
     Serial.println(F("Encoder not responding"));
     healthy = false;
   }
@@ -314,6 +339,3 @@ bool SensorManager::checkSensorHealth() {
   return healthy;
 }
 
-void SensorManager::encoderISR() {
-  encoderPulseCount++;
-}

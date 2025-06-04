@@ -13,9 +13,9 @@ private:
   void* apds9960;
   
   // Encoder variables
-  volatile unsigned long encoderPulseCount;
+  int32_t encoderPosition;
+  int32_t lastEncoderPosition;
   unsigned long lastEncoderTime;
-  unsigned long lastPulseCount;
   float currentSpeed_rpm;
   
   // Part detection
@@ -36,7 +36,7 @@ private:
   SensorReadings currentReadings;
   
   // Private methods
-  void initializeEncoder();
+  bool initializeSeesaw();
   bool initializeBME688();
   bool initializeVL53L1X();
   bool initializeLSM9DS1();
@@ -77,12 +77,7 @@ public:
   // Utility functions
   void clearGesture() { lastGesture = GESTURE_NONE; }
   bool checkSensorHealth();
-  
-  // Interrupt handler for encoder
-  void encoderISR();
 };
 
-// Global instance for ISR access
-extern SensorManager* sensorManagerInstance;
 
 #endif // SENSOR_MANAGER_H
