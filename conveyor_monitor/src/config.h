@@ -3,6 +3,9 @@
 
 // System Configuration for FlexForge Conveyor Monitor
 
+// Virtual Sensor Mode - generates fake data if sensor init fails
+#define VIRTUAL_SENSOR    1    // Set to 1 to enable virtual sensors
+
 // Timing intervals (milliseconds)
 #define SENSOR_READ_INTERVAL     100    // 10Hz for critical sensors
 #define DATA_PROCESS_INTERVAL    500    // 2Hz for data processing
@@ -94,29 +97,29 @@ struct SensorReadings {
   // Encoder
   float encoderSpeed;
   int32_t encoderPulses;
-  
+
   // ToF
   uint16_t distance_mm;
   bool objectDetected;
-  
+
   // IMU
   float accel_x, accel_y, accel_z;
   float gyro_x, gyro_y, gyro_z;
   float mag_x, mag_y, mag_z;
-  
+
   // Environmental
   float temperature;
   float humidity;
   float pressure;
   uint32_t gasResistance;
-  
+
   // Gesture
   uint8_t gesture;
   uint8_t proximity;
 };
 
 // Notecard configuration
-#define NOTECARD_PRODUCT_UID    "com.flexforge.conveyor"
+#define NOTECARD_PRODUCT_UID    "com.blues.flex_forge.production_line"
 #define NOTECARD_CONTINUOUS     false    // Use periodic sync
 #define NOTECARD_SYNC_MINS      5        // Sync every 5 minutes
 #define NOTECARD_MOTION_SENSE   true     // Enable motion sensitivity

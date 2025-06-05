@@ -1,9 +1,9 @@
 /**
  * FlexForge Conveyor Management System
- * 
+ *
  * Real-time monitoring system for production line conveyors
  * Target: Blues Cygnet STM32L433 MCU with Blues Notecard
- * 
+ *
  * Features:
  * - Speed monitoring via rotary encoder
  * - Jam detection using ToF sensor
@@ -46,38 +46,40 @@ SystemState currentState = {
 
 void setup() {
   Serial.begin(115200);
-  while (!Serial && millis() < 5000); // Wait up to 5 seconds for serial
-  
+  const size_t usb_timeout_ms = 3000;
+  for (const size_t start_ms = millis(); !Serial && (millis() - start_ms) < usb_timeout_ms;)
+      ;
+
   Serial.println(F("FlexForge Conveyor Monitor v1.0"));
   Serial.println(F("Initializing..."));
-  
+
   // Initialize I2C bus
   Wire.begin();
-  Wire.setClock(400000); // 400kHz I2C
-  
+  Wire.setClock(400000); // 400kHz I2C for sensors
+
   // Initialize components
   if (!sensorManager.begin()) {
     Serial.println(F("ERROR: Sensor initialization failed!"));
     while(1) { delay(1000); } // Halt
   }
-  
+
   if (!notecardManager.begin()) {
     Serial.println(F("ERROR: Notecard initialization failed!"));
     while(1) { delay(1000); } // Halt
   }
-  
+
   dataProcessor.begin();
   alertHandler.begin(&notecardManager);
-  
+
   Serial.println(F("System ready!"));
-  
+
   // Send startup notification
   notecardManager.sendEvent("system.startup", "{\"version\":\"1.0\",\"sensors\":\"ok\"}");
 }
 
 void loop() {
   unsigned long currentMillis = millis();
-  
+
   // Read sensors at high frequency
   if (currentMillis - lastSensorRead >= SENSOR_READ_INTERVAL) {
     lastSensorRead = currentMillis;

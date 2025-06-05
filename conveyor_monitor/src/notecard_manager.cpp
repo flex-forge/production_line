@@ -11,27 +11,28 @@ NotecardManager::NotecardManager() {
 
 bool NotecardManager::begin() {
   Serial.println(F("Initializing Notecard..."));
-  
-  // Initialize Notecard library
-  notecard.begin();
-  
+
+  // Initialize Notecard Serial communication
+  notecard.setDebugOutputStream(Serial);
+  notecard.begin(NOTECARD_SERIAL, 9600);
+
   // Configure the Notecard
   if (!configureNotecard()) {
     Serial.println(F("Failed to configure Notecard"));
     return false;
   }
-  
+
   // Set location mode if needed
   if (!setLocationMode()) {
     Serial.println(F("Failed to set location mode"));
     // Non-critical, continue
   }
-  
+
   // Enable motion detection if configured
   if (NOTECARD_MOTION_SENSE) {
     enableMotionDetection(true);
   }
-  
+
   connected = true;
   Serial.println(F("Notecard initialized successfully"));
   return true;
@@ -42,7 +43,7 @@ bool NotecardManager::configureNotecard() {
   J *req = notecard.newRequest("hub.set");
   if (req) {
     JAddStringToObject(req, "product", productUID.c_str());
-    
+
     if (continuousMode) {
       JAddStringToObject(req, "mode", "continuous");
     } else {
@@ -50,19 +51,19 @@ bool NotecardManager::configureNotecard() {
       JAddNumberToObject(req, "outbound", syncMinutes);
       JAddNumberToObject(req, "inbound", syncMinutes * 2); // Check less frequently
     }
-    
+
     if (!notecard.sendRequest(req)) {
       return false;
     }
   }
-  
+
   // Configure card voltage monitoring
   req = notecard.newRequest("card.voltage");
   if (req) {
     JAddStringToObject(req, "mode", "lipo");
     notecard.sendRequest(req);
   }
-  
+
   // Set up environment variables for the conveyor system
   req = notecard.newRequest("env.set");
   if (req) {
@@ -70,7 +71,7 @@ bool NotecardManager::configureNotecard() {
     JAddStringToObject(req, "text", "LINE_001"); // Default line ID
     notecard.sendRequest(req);
   }
-  
+
   return true;
 }
 
@@ -88,7 +89,7 @@ bool NotecardManager::sendTelemetry(const char* jsonData) {
   if (!connected) {
     return false;
   }
-  
+
   J *req = notecard.newRequest("note.add");
   if (req) {
     JAddStringToObject(req, "file", "telemetry.qo");

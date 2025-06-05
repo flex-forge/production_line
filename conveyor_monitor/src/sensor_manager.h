@@ -12,6 +12,13 @@ private:
   void* lsm9ds1;
   void* apds9960;
   
+  // Sensor availability flags
+  bool seesawAvailable;
+  bool bme688Available;
+  bool vl53l1xAvailable;
+  bool lsm9ds1Available;
+  bool apds9960Available;
+  
   // Encoder variables
   int32_t encoderPosition;
   int32_t lastEncoderPosition;
@@ -50,6 +57,13 @@ private:
   
   void calculateVibration();
   void updatePartCount();
+  
+  // Virtual sensor data generation
+  void generateVirtualEncoderData();
+  void generateVirtualEnvironmentalData();
+  void generateVirtualDistanceData();
+  void generateVirtualIMUData();
+  void generateVirtualGestureData();
   
 public:
   SensorManager();

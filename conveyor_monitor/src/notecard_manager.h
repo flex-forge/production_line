@@ -5,6 +5,9 @@
 #include <Notecard.h>
 #include "config.h"
 
+// Notecard Serial configuration
+#define NOTECARD_SERIAL Serial1
+
 class NotecardManager {
 private:
   Notecard notecard;
