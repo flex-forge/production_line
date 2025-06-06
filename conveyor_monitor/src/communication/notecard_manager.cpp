@@ -162,9 +162,12 @@ bool NotecardManager::sendEvent(const char* eventType, const char* jsonData) {
       JAddStringToObject(body, "event", eventType);
       JAddNumberToObject(body, "time", millis() / 1000);
       
-      // Add additional data as a JSON string
+      // Parse and add data as an object instead of string
       if (jsonData && strlen(jsonData) > 0) {
-        JAddStringToObject(body, "data", jsonData);
+        J *dataJson = JParse(jsonData);
+        if (dataJson) {
+          JAddItemToObject(body, "data", dataJson);
+        }
       }
       
       JAddItemToObject(req, "body", body);
