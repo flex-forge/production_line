@@ -2,8 +2,8 @@
 #define ALERT_HANDLER_H
 
 #include <Arduino.h>
-#include "config.h"
-#include "notecard_manager.h"
+#include "../config/config.h"
+#include "../communication/notecard_manager.h"
 
 struct Alert {
   AlertType type;

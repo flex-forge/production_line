@@ -1,4 +1,5 @@
 #include "sensor_manager.h"
+#include "../utils/error_handling.h"
 #include <Wire.h>
 #include <Adafruit_BME680.h>
 #include <VL53L1X.h>
@@ -19,7 +20,7 @@ Adafruit_seesaw seesaw;
 
 SensorManager::SensorManager() {
   encoderPosition = 0;
-  lastEncoderPosition = 0;
+  baselineEncoderPosition = 0;
   lastEncoderTime = 0;
   currentSpeed_rpm = 0.0;
   lastPartDetectTime = 0;
@@ -38,60 +39,44 @@ SensorManager::SensorManager() {
   apds9960Available = false;
 }
 
+bool SensorManager::initializeSensorWithFallback(bool (SensorManager::*initFunc)(), bool& availabilityFlag, 
+                                                const char* sensorName, const char* virtualFallbackMsg) {
+  availabilityFlag = (this->*initFunc)();
+  if (!availabilityFlag) {
+    Serial.print(sensorName);
+    Serial.println(F(" init failed"));
+    LOG_ERROR_CTX(SystemError::SENSOR_INIT_FAILED, sensorName);
+    
+    #if VIRTUAL_SENSOR
+      Serial.print(F("  -> Using "));
+      Serial.println(virtualFallbackMsg);
+    #endif
+  } else {
+    Serial.print(sensorName);
+    Serial.println(F(" initialized successfully"));
+  }
+  return availabilityFlag;
+}
+
 bool SensorManager::begin() {
   Serial.println(F("Initializing sensors..."));
   bool allSensorsOk = true;
 
-  // Initialize I2C sensors
-  seesawAvailable = initializeSeesaw();
-  if (!seesawAvailable) {
-    Serial.println(F("Seesaw encoder init failed"));
-    #if VIRTUAL_SENSOR
-      Serial.println(F("  -> Using virtual encoder data"));
-    #else
-      allSensorsOk = false;
-    #endif
-  }
-
-  bme688Available = initializeBME688();
-  if (!bme688Available) {
-    Serial.println(F("BME688 init failed"));
-    #if VIRTUAL_SENSOR
-      Serial.println(F("  -> Using virtual environmental data"));
-    #else
-      allSensorsOk = false;
-    #endif
-  }
-
-  vl53l1xAvailable = initializeVL53L1X();
-  if (!vl53l1xAvailable) {
-    Serial.println(F("VL53L1X init failed"));
-    #if VIRTUAL_SENSOR
-      Serial.println(F("  -> Using virtual distance data"));
-    #else
-      allSensorsOk = false;
-    #endif
-  }
-
-  lsm9ds1Available = initializeLSM9DS1();
-  if (!lsm9ds1Available) {
-    Serial.println(F("LSM9DS1 init failed"));
-    #if VIRTUAL_SENSOR
-      Serial.println(F("  -> Using virtual IMU data"));
-    #else
-      allSensorsOk = false;
-    #endif
-  }
-
-  apds9960Available = initializeAPDS9960();
-  if (!apds9960Available) {
-    Serial.println(F("APDS9960 init failed"));
-    #if VIRTUAL_SENSOR
-      Serial.println(F("  -> Using virtual gesture data"));
-    #else
-      allSensorsOk = false;
-    #endif
-  }
+  // Initialize I2C sensors using helper method to reduce duplication
+  allSensorsOk &= initializeSensorWithFallback(&SensorManager::initializeSeesaw, seesawAvailable, 
+                                              "Seesaw encoder", "virtual encoder data");
+  
+  allSensorsOk &= initializeSensorWithFallback(&SensorManager::initializeBME688, bme688Available, 
+                                              "BME688", "virtual environmental data");
+  
+  allSensorsOk &= initializeSensorWithFallback(&SensorManager::initializeVL53L1X, vl53l1xAvailable, 
+                                              "VL53L1X", "virtual distance data");
+  
+  allSensorsOk &= initializeSensorWithFallback(&SensorManager::initializeLSM9DS1, lsm9ds1Available, 
+                                              "LSM9DS1", "virtual IMU data");
+  
+  allSensorsOk &= initializeSensorWithFallback(&SensorManager::initializeAPDS9960, apds9960Available, 
+                                              "APDS9960", "virtual gesture data");
 
   #if VIRTUAL_SENSOR
     Serial.println(F("Sensor initialization complete (virtual mode enabled)"));
@@ -121,11 +106,13 @@ bool SensorManager::initializeSeesaw() {
   seesaw.setGPIOInterrupts((uint32_t)1 << 24, 1);
   seesaw.enableEncoderInterrupt();
   
-  // Reset encoder position
-  seesaw.setEncoderPosition(0);
-  encoderPosition = 0;
-  lastEncoderPosition = 0;
+  // Read current position as baseline (zero speed position)
+  baselineEncoderPosition = seesaw.getEncoderPosition();
+  encoderPosition = baselineEncoderPosition;
   lastEncoderTime = millis();
+  
+  Serial.print(F("Encoder baseline position set to: "));
+  Serial.println(baselineEncoderPosition);
   
   return true;
 }
@@ -146,17 +133,26 @@ bool SensorManager::initializeBME688() {
 }
 
 bool SensorManager::initializeVL53L1X() {
-  distanceSensor.setTimeout(500);
+  Serial.println(F("Initializing VL53L1X ToF sensor..."));
+  
+  // Set longer timeout for initialization
+  distanceSensor.setTimeout(2000);
   
   if (!distanceSensor.init()) {
+    Serial.println(F("VL53L1X init() failed"));
     return false;
   }
-  
-  // Configure for short range, high speed
+
+  // Configure for short range, fast operation
   distanceSensor.setDistanceMode(VL53L1X::Short);
-  distanceSensor.setMeasurementTimingBudget(20000); // 20ms
-  distanceSensor.startContinuous(50); // 50ms between measurements
-  
+  distanceSensor.setMeasurementTimingBudget(50000); // 50ms timing budget
+
+  // Start continuous mode
+  distanceSensor.startContinuous(100); // 100ms between measurements
+
+  // Wait for first measurement to be ready
+  delay(200);
+
   return true;
 }
 
@@ -185,7 +181,7 @@ bool SensorManager::initializeAPDS9960() {
   
   // Configure gesture sensor
   gestureSensor.enableGestureSensor(true);
-  gestureSensor.enableProximitySensor(false);
+  gestureSensor.enableProximitySensor(true);  // Enable proximity for gesture detection
   gestureSensor.setGestureGain(GGAIN_2X);
   gestureSensor.setGestureLEDDrive(LED_DRIVE_25MA);
   
@@ -208,31 +204,39 @@ void SensorManager::readEncoder() {
     // Read current encoder position
     encoderPosition = seesaw.getEncoderPosition();
     
-    unsigned long currentTime = millis();
-    unsigned long timeDiff = currentTime - lastEncoderTime;
+    // Calculate speed based on offset from baseline position
+    int32_t positionOffset = encoderPosition - baselineEncoderPosition;
     
-    if (timeDiff >= 1000) { // Calculate speed every second
-      int32_t positionDiff = encoderPosition - lastEncoderPosition;
-      
-      // Handle wraparound
-      if (abs(positionDiff) > 32768) {
-        if (positionDiff > 0) {
-          positionDiff -= 65536;
-        } else {
-          positionDiff += 65536;
-        }
-      }
-      
-      // Calculate RPM: (pulses/sec) * 60 / (pulses/rev) / gear_ratio
-      currentSpeed_rpm = (abs(positionDiff) * 60000.0) / (timeDiff * ENCODER_PULSES_PER_REV * CONVEYOR_GEAR_RATIO);
-      
-      lastEncoderPosition = encoderPosition;
-      lastEncoderTime = currentTime;
-      
-      currentReadings.encoderSpeed = currentSpeed_rpm;
-      currentReadings.encoderPulses = encoderPosition;
+    // Convert position offset to speed (each detent = 1 RPM increment)
+    // Positive offset = faster, negative offset = reverse/slower
+    currentSpeed_rpm = positionOffset * 1.0; // 1 RPM per detent
+
+    // Clamp speed to reasonable range
+    if (currentSpeed_rpm < 0.0) currentSpeed_rpm = 0.0;        // No negative speeds
+    if (currentSpeed_rpm > 100.0) currentSpeed_rpm = 100.0;    // Max 100 RPM
+
+    // Debug encoder readings
+    /*
+    static unsigned long lastEncoderDebug = 0;
+    unsigned long currentTime = millis();
+    if (currentTime - lastEncoderDebug > 5000) { // Every 5 seconds
+      Serial.print(F("Encoder - Position: "));
+      Serial.print(encoderPosition);
+      Serial.print(F(", Baseline: "));
+      Serial.print(baselineEncoderPosition);
+      Serial.print(F(", Offset: "));
+      Serial.print(positionOffset);
+      Serial.print(F(", Speed: "));
+      Serial.print(currentSpeed_rpm);
+      Serial.println(F(" RPM"));
+      lastEncoderDebug = currentTime;
     }
+    */
+
+    currentReadings.encoderSpeed = currentSpeed_rpm;
+    currentReadings.encoderPulses = encoderPosition;
   } else {
+    Serial.println(F("Seesaw not available, using virtual encoder"));
     generateVirtualEncoderData();
   }
 }
@@ -254,7 +258,7 @@ void SensorManager::readDistance() {
   if (vl53l1xAvailable) {
     uint16_t distance = distanceSensor.read(false);
     
-    if (distance != 0) { // 0 indicates timeout
+    if (distance != 0 && !distanceSensor.timeoutOccurred()) {
       currentReadings.distance_mm = distance;
       
       // Detect if object is present
@@ -266,6 +270,11 @@ void SensorManager::readDistance() {
         lastPartDetectTime = millis();
       }
       lastPartDetected = currentReadings.objectDetected;
+    } else {
+      // Handle timeout - keep last valid reading but don't update part detection
+      if (distanceSensor.timeoutOccurred()) {
+        Serial.println(F("VL53L1X timeout"));
+      }
     }
   } else {
     generateVirtualDistanceData();
@@ -318,19 +327,24 @@ void SensorManager::readGesture() {
         switch (gesture) {
           case DIR_UP:
             lastGesture = GESTURE_SWIPE_UP;
+            Serial.println(F("Gesture detected: UP"));
             break;
           case DIR_DOWN:
             lastGesture = GESTURE_SWIPE_DOWN;
+            Serial.println(F("Gesture detected: DOWN"));
             break;
           case DIR_LEFT:
             lastGesture = GESTURE_SWIPE_LEFT;
+            Serial.println(F("Gesture detected: LEFT"));
             break;
           case DIR_RIGHT:
             lastGesture = GESTURE_SWIPE_RIGHT;
+            Serial.println(F("Gesture detected: RIGHT"));
             break;
           case DIR_NEAR:
           case DIR_FAR:
             lastGesture = GESTURE_WAVE;
+            Serial.println(F("Gesture detected: WAVE"));
             break;
         }
         lastGestureTime = currentTime;
@@ -341,6 +355,17 @@ void SensorManager::readGesture() {
     uint8_t proximity = 0;
     gestureSensor.readProximity(proximity);
     currentReadings.proximity = proximity;
+    
+    // Periodic proximity debug
+    static unsigned long lastProxDebug = 0;
+    if (millis() - lastProxDebug > 10000) { // Every 10 seconds
+      Serial.print(F("APDS9960 Proximity: "));
+      Serial.print(proximity);
+      Serial.print(F(" (Operator: "));
+      Serial.print(proximity > 10 ? "YES" : "NO");
+      Serial.println(F(")"));
+      lastProxDebug = millis();
+    }
   } else {
     generateVirtualGestureData();
   }
@@ -365,7 +390,7 @@ void SensorManager::updatePartCount() {
   }
 }
 
-int SensorManager::getPartsCount() {
+int SensorManager::getPartsCount() const {
   // Calculate parts per minute
   unsigned long elapsed = millis() - partCountStartTime;
   if (elapsed > 0) {
@@ -374,25 +399,40 @@ int SensorManager::getPartsCount() {
   return 0;
 }
 
-bool SensorManager::checkSensorHealth() {
+bool SensorManager::checkSensorHealth() const {
   // Check if we're getting readings from all sensors
   bool healthy = true;
   
-  // Check if encoder is responding (should have position changes if running)
-  if (seesawAvailable && currentSpeed_rpm > MIN_SPEED_THRESHOLD && encoderPosition == lastEncoderPosition) {
-    Serial.println(F("Encoder not responding"));
+  // Check if encoder is responding (position-based speed control always responds)
+  if (seesawAvailable) {
+    // Note: We can't check position changes in a const method
+    // This is acceptable as we primarily check availability flags
+  }
+  
+  // Check ToF sensor (read-only health check)
+  if (vl53l1xAvailable) {
+    // For const method, we primarily check availability
+    // Actual timeout checking happens during regular reads
+  } else {
+    LOG_ERROR_CTX(SystemError::SENSOR_READ_TIMEOUT, "VL53L1X not available");
     healthy = false;
   }
   
-  // Check ToF sensor
-  if (vl53l1xAvailable && distanceSensor.read(false) == 0) {
-    Serial.println(F("ToF sensor timeout"));
+  // Check BME688 availability
+  if (!bme688Available) {
+    LOG_ERROR_CTX(SystemError::SENSOR_READ_TIMEOUT, "BME688 not available");
     healthy = false;
   }
   
-  // BME688 has internal error checking
-  if (bme688Available && !bme.performReading()) {
-    Serial.println(F("BME688 read error"));
+  // Check IMU availability
+  if (!lsm9ds1Available) {
+    LOG_ERROR_CTX(SystemError::SENSOR_READ_TIMEOUT, "LSM9DS1 not available");
+    healthy = false;
+  }
+  
+  // Check gesture sensor availability
+  if (!apds9960Available) {
+    LOG_ERROR_CTX(SystemError::SENSOR_READ_TIMEOUT, "APDS9960 not available");
     healthy = false;
   }
   

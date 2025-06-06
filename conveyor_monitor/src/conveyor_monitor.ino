@@ -14,17 +14,21 @@
 
 #include <Wire.h>
 #include <Notecard.h>
-#include "config.h"
-#include "sensor_manager.h"
-#include "data_processor.h"
-#include "notecard_manager.h"
-#include "alert_handler.h"
+#include "config/config.h"
+#include "sensors/sensor_manager.h"
+#include "data_processing/data_processor.h"
+#include "communication/notecard_manager.h"
+#include "alerts/alert_handler.h"
+#include "communication/telemetry_formatter.h"
+#include "utils/error_handling.h"
+#include "utils/performance_utils.h"
 
 // Global objects
 SensorManager sensorManager;
 DataProcessor dataProcessor;
 NotecardManager notecardManager;
 AlertHandler alertHandler;
+TelemetryFormatter telemetryFormatter;
 
 // Timing variables
 unsigned long lastSensorRead = 0;
@@ -40,6 +44,8 @@ SystemState currentState = {
   .vibrationLevel = 0.0,
   .temperature = 0.0,
   .humidity = 0.0,
+  .pressure = 0.0,
+  .gasResistance = 0,
   .lastJamTime = 0,
   .operatorPresent = false
 };
@@ -96,6 +102,7 @@ void loop() {
   // Sync to cloud at low frequency (or immediately for alerts)
   if (currentMillis - lastCloudSync >= CLOUD_SYNC_INTERVAL || alertHandler.hasPendingAlerts()) {
     lastCloudSync = currentMillis;
+    Serial.println(F("=== Cloud Sync Triggered ==="));
     syncToCloud();
   }
   
@@ -110,8 +117,8 @@ void loop() {
 }
 
 void readSensors() {
-  // Read all sensors and update raw data
-  sensorManager.readAll();
+  // Read all sensors and update raw data with performance monitoring
+  PERF_TIME(sensorReadTimer, sensorManager.readAll());
   
   // Update current state with latest readings
   currentState.speed_rpm = sensorManager.getConveyorSpeed();
@@ -120,12 +127,21 @@ void readSensors() {
   currentState.vibrationLevel = sensorManager.getVibrationMagnitude();
   currentState.temperature = sensorManager.getTemperature();
   currentState.humidity = sensorManager.getHumidity();
+  currentState.pressure = sensorManager.getPressure();
+  currentState.gasResistance = sensorManager.getAirQuality();
   currentState.operatorPresent = sensorManager.isOperatorPresent();
+  
+  // Debug telemetry values
+  static unsigned long lastDebug = 0;
+  if (millis() - lastDebug > 10000) { // Every 10 seconds
+    telemetryFormatter.printDebugInfo(currentState);
+    lastDebug = millis();
+  }
 }
 
 void processData() {
-  // Feed raw data to processor
-  dataProcessor.update(currentState);
+  // Feed raw data to processor with performance monitoring
+  PERF_TIME(dataProcessTimer, dataProcessor.update(currentState));
   
   // Check for anomalies
   if (dataProcessor.detectSpeedAnomaly()) {
@@ -152,22 +168,25 @@ void checkAlerts() {
 }
 
 void syncToCloud() {
-  // Prepare telemetry data
+  // Validate system state and print debug info
+  telemetryFormatter.validateSystemState(currentState);
+  
+  // Format telemetry data using the formatter with performance monitoring
   char telemetryData[512];
-  snprintf(telemetryData, sizeof(telemetryData),
-    "{\"speed_rpm\":%.1f,\"parts_per_min\":%d,\"vibration\":%.2f,"
-    "\"temp\":%.1f,\"humidity\":%.1f,\"running\":%s,\"operator\":%s}",
-    currentState.speed_rpm,
-    currentState.partsPerMinute,
-    currentState.vibrationLevel,
-    currentState.temperature,
-    currentState.humidity,
-    currentState.conveyorRunning ? "true" : "false",
-    currentState.operatorPresent ? "true" : "false"
+  bool formatted = false;
+  PERF_TIME(telemetryTimer, 
+    formatted = telemetryFormatter.formatTelemetry(currentState, telemetryData, sizeof(telemetryData))
   );
   
-  // Send regular telemetry
-  notecardManager.sendTelemetry(telemetryData);
+  if (formatted) {
+    Serial.print(F("Telemetry JSON: "));
+    Serial.println(telemetryData);
+    
+    // Send regular telemetry
+    notecardManager.sendTelemetry(telemetryData);
+  } else {
+    Serial.println(F("ERROR: Failed to format telemetry data"));
+  }
   
   // Send any pending alerts
   alertHandler.sendPendingAlerts();
@@ -186,14 +205,14 @@ void handleOperatorInput() {
         }
         break;
         
-      case GESTURE_SWIPE_DOWN:
-        // Pause monitoring
-        notecardManager.sendEvent("operator.action", "{\"action\":\"monitoring_paused\"}");
-        break;
-        
-      case GESTURE_WAVE:
+      case GESTURE_SWIPE_LEFT:
         // Resume monitoring
         notecardManager.sendEvent("operator.action", "{\"action\":\"monitoring_resumed\"}");
+        break;
+        
+      case GESTURE_SWIPE_RIGHT:
+        // Pause monitoring
+        notecardManager.sendEvent("operator.action", "{\"action\":\"monitoring_paused\"}");
         break;
     }
     
@@ -209,8 +228,14 @@ void performHealthCheck() {
   
   // Check Notecard connectivity
   if (!notecardManager.isConnected()) {
+    LOG_ERROR_CTX(SystemError::NOTECARD_SEND_FAILED, "Notecard disconnected");
     // Try to reconnect
     notecardManager.reconnect();
+  }
+  
+  // Check for critical system errors
+  if (systemErrorHandler.hasCriticalErrors()) {
+    alertHandler.triggerAlert(ALERT_SENSOR_FAILURE, "Critical system errors detected");
   }
   
   // Log system stats
@@ -221,4 +246,29 @@ void performHealthCheck() {
   Serial.print(F("/min, Vib="));
   Serial.print(currentState.vibrationLevel);
   Serial.println(F("g"));
+  
+  // Periodically print error and performance statistics
+  static unsigned long lastErrorReport = 0;
+  if (millis() - lastErrorReport > 300000) { // Every 5 minutes
+    systemErrorHandler.printErrorStats();
+    
+    // Print performance statistics
+    Serial.println(F("=== Performance Statistics ==="));
+    Serial.print(F("Sensor Read - Avg: "));
+    Serial.print(sensorReadTimer.getAverageTime());
+    Serial.print(F("μs, Calls: "));
+    Serial.println(sensorReadTimer.getCallCount());
+    
+    Serial.print(F("Data Process - Avg: "));
+    Serial.print(dataProcessTimer.getAverageTime());
+    Serial.print(F("μs, Calls: "));
+    Serial.println(dataProcessTimer.getCallCount());
+    
+    Serial.print(F("Telemetry - Avg: "));
+    Serial.print(telemetryTimer.getAverageTime());
+    Serial.print(F("μs, Calls: "));
+    Serial.println(telemetryTimer.getCallCount());
+    
+    lastErrorReport = millis();
+  }
 }
