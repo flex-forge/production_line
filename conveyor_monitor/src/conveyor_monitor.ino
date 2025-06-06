@@ -21,6 +21,7 @@
 #include "alerts/alert_handler.h"
 #include "communication/telemetry_formatter.h"
 #include "utils/error_handling.h"
+#include "utils/performance_utils.h"
 
 // Global objects
 SensorManager sensorManager;
@@ -116,8 +117,8 @@ void loop() {
 }
 
 void readSensors() {
-  // Read all sensors and update raw data
-  sensorManager.readAll();
+  // Read all sensors and update raw data with performance monitoring
+  PERF_TIME(sensorReadTimer, sensorManager.readAll());
   
   // Update current state with latest readings
   currentState.speed_rpm = sensorManager.getConveyorSpeed();
@@ -139,8 +140,8 @@ void readSensors() {
 }
 
 void processData() {
-  // Feed raw data to processor
-  dataProcessor.update(currentState);
+  // Feed raw data to processor with performance monitoring
+  PERF_TIME(dataProcessTimer, dataProcessor.update(currentState));
   
   // Check for anomalies
   if (dataProcessor.detectSpeedAnomaly()) {
@@ -170,9 +171,14 @@ void syncToCloud() {
   // Validate system state and print debug info
   telemetryFormatter.validateSystemState(currentState);
   
-  // Format telemetry data using the formatter
+  // Format telemetry data using the formatter with performance monitoring
   char telemetryData[512];
-  if (telemetryFormatter.formatTelemetry(currentState, telemetryData, sizeof(telemetryData))) {
+  bool formatted = false;
+  PERF_TIME(telemetryTimer, 
+    formatted = telemetryFormatter.formatTelemetry(currentState, telemetryData, sizeof(telemetryData))
+  );
+  
+  if (formatted) {
     Serial.print(F("Telemetry JSON: "));
     Serial.println(telemetryData);
     
@@ -241,10 +247,28 @@ void performHealthCheck() {
   Serial.print(currentState.vibrationLevel);
   Serial.println(F("g"));
   
-  // Periodically print error statistics
+  // Periodically print error and performance statistics
   static unsigned long lastErrorReport = 0;
   if (millis() - lastErrorReport > 300000) { // Every 5 minutes
     systemErrorHandler.printErrorStats();
+    
+    // Print performance statistics
+    Serial.println(F("=== Performance Statistics ==="));
+    Serial.print(F("Sensor Read - Avg: "));
+    Serial.print(sensorReadTimer.getAverageTime());
+    Serial.print(F("μs, Calls: "));
+    Serial.println(sensorReadTimer.getCallCount());
+    
+    Serial.print(F("Data Process - Avg: "));
+    Serial.print(dataProcessTimer.getAverageTime());
+    Serial.print(F("μs, Calls: "));
+    Serial.println(dataProcessTimer.getCallCount());
+    
+    Serial.print(F("Telemetry - Avg: "));
+    Serial.print(telemetryTimer.getAverageTime());
+    Serial.print(F("μs, Calls: "));
+    Serial.println(telemetryTimer.getCallCount());
+    
     lastErrorReport = millis();
   }
 }

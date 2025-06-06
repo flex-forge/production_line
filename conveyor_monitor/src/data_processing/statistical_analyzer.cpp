@@ -1,59 +1,57 @@
 #include "statistical_analyzer.h"
 
-StatisticalAnalyzer::StatisticalAnalyzer() {
-  speedHistoryIndex = 0;
+StatisticalAnalyzer::StatisticalAnalyzer() 
+  : speedHistory(true), vibrationHistory(true), tempHistory(true), humidityHistory(true) {
   averageSpeed = 0.0f;
   speedVariance = 0.0f;
-  vibrationHistoryIndex = 0;
   vibrationBaseline = VIBRATION_BASELINE_G;
   baselineEstablished = false;
-  envHistoryIndex = 0;
 }
 
 void StatisticalAnalyzer::begin() {
-  // Initialize history arrays
-  for (int i = 0; i < SPEED_HISTORY_SIZE; i++) {
-    speedHistory[i] = 0.0f;
+  // Clear all circular buffers
+  speedHistory.clear();
+  vibrationHistory.clear();
+  tempHistory.clear();
+  humidityHistory.clear();
+  
+  // Pre-fill buffers with reasonable default values
+  for (int i = 0; i < 10; i++) {
+    speedHistory.push(0.0f);
+    tempHistory.push(20.0f);  // Room temperature
+    humidityHistory.push(50.0f);  // Normal humidity
   }
   
-  for (int i = 0; i < ENV_HISTORY_SIZE; i++) {
-    tempHistory[i] = 20.0f; // Assume room temp
-    humidityHistory[i] = 50.0f; // Assume normal humidity
-  }
-  
-  for (int i = 0; i < VIBRATION_HISTORY_SIZE; i++) {
-    vibrationHistory[i] = VIBRATION_BASELINE_G;
+  for (int i = 0; i < 30; i++) {
+    vibrationHistory.push(VIBRATION_BASELINE_G);
   }
   
   Serial.println(F("Statistical analyzer initialized"));
 }
 
 void StatisticalAnalyzer::update(const SystemState& state) {
-  // Update speed history
-  speedHistory[speedHistoryIndex] = state.speed_rpm;
-  speedHistoryIndex = (speedHistoryIndex + 1) % SPEED_HISTORY_SIZE;
+  // Update speed history using circular buffer
+  speedHistory.push(state.speed_rpm);
   
-  // Calculate speed statistics
-  averageSpeed = calculateMean(speedHistory, SPEED_HISTORY_SIZE);
-  speedVariance = calculateVariance(speedHistory, SPEED_HISTORY_SIZE, averageSpeed);
+  // Calculate speed statistics using circular buffer methods
+  averageSpeed = speedHistory.average();
+  speedVariance = speedHistory.variance(averageSpeed);
   
-  // Update vibration history
-  vibrationHistory[vibrationHistoryIndex] = state.vibrationLevel;
-  vibrationHistoryIndex = (vibrationHistoryIndex + 1) % VIBRATION_HISTORY_SIZE;
+  // Update vibration history using circular buffer
+  vibrationHistory.push(state.vibrationLevel);
   
-  // Establish vibration baseline after full cycle
-  if (!baselineEstablished && vibrationHistoryIndex == 0) {
-    vibrationBaseline = calculateMean(vibrationHistory, VIBRATION_HISTORY_SIZE);
+  // Establish vibration baseline after buffer is full
+  if (!baselineEstablished && vibrationHistory.isFull()) {
+    vibrationBaseline = vibrationHistory.average();
     baselineEstablished = true;
     Serial.print(F("Vibration baseline established: "));
     Serial.print(vibrationBaseline);
     Serial.println(F("g"));
   }
   
-  // Update environmental history
-  tempHistory[envHistoryIndex] = state.temperature;
-  humidityHistory[envHistoryIndex] = state.humidity;
-  envHistoryIndex = (envHistoryIndex + 1) % ENV_HISTORY_SIZE;
+  // Update environmental history using circular buffers
+  tempHistory.push(state.temperature);
+  humidityHistory.push(state.humidity);
 }
 
 float StatisticalAnalyzer::calculateMean(const float* data, int size) const {
@@ -96,34 +94,84 @@ float StatisticalAnalyzer::calculateTrend(const float* data, int size) const {
 }
 
 float StatisticalAnalyzer::getVibrationTrend() const {
-  if (!baselineEstablished) {
+  if (!baselineEstablished || vibrationHistory.size() < 2) {
     return 0.0f;
   }
-  return calculateTrend(vibrationHistory, VIBRATION_HISTORY_SIZE);
+  
+  // Calculate linear trend using least squares method on circular buffer
+  size_t size = vibrationHistory.size();
+  float sumX = 0.0f, sumY = 0.0f, sumXY = 0.0f, sumX2 = 0.0f;
+  
+  for (size_t i = 0; i < size; i++) {
+    float x = static_cast<float>(i);
+    float y = vibrationHistory[i];
+    sumX += x;
+    sumY += y;
+    sumXY += x * y;
+    sumX2 += x * x;
+  }
+  
+  float denominator = size * sumX2 - sumX * sumX;
+  if (abs(denominator) < 0.001f) {
+    return 0.0f; // Avoid division by zero
+  }
+  
+  return (size * sumXY - sumX * sumY) / denominator;
 }
 
 float StatisticalAnalyzer::getCurrentVibration() const {
-  int currentIndex = (vibrationHistoryIndex - 1 + VIBRATION_HISTORY_SIZE) % VIBRATION_HISTORY_SIZE;
-  return vibrationHistory[currentIndex];
+  if (vibrationHistory.isEmpty()) {
+    return 0.0f;
+  }
+  return vibrationHistory.newest();
 }
 
 float StatisticalAnalyzer::getTemperatureVariance() const {
-  float mean = calculateMean(tempHistory, ENV_HISTORY_SIZE);
-  return calculateVariance(tempHistory, ENV_HISTORY_SIZE, mean);
+  if (tempHistory.isEmpty()) {
+    return 0.0f;
+  }
+  float mean = tempHistory.average();
+  return tempHistory.variance(mean);
 }
 
 float StatisticalAnalyzer::getHumidityTrend() const {
-  return calculateTrend(humidityHistory, ENV_HISTORY_SIZE);
+  if (humidityHistory.size() < 2) {
+    return 0.0f;
+  }
+  
+  // Calculate linear trend for humidity
+  size_t size = humidityHistory.size();
+  float sumX = 0.0f, sumY = 0.0f, sumXY = 0.0f, sumX2 = 0.0f;
+  
+  for (size_t i = 0; i < size; i++) {
+    float x = static_cast<float>(i);
+    float y = humidityHistory[i];
+    sumX += x;
+    sumY += y;
+    sumXY += x * y;
+    sumX2 += x * x;
+  }
+  
+  float denominator = size * sumX2 - sumX * sumX;
+  if (abs(denominator) < 0.001f) {
+    return 0.0f; // Avoid division by zero
+  }
+  
+  return (size * sumXY - sumX * sumY) / denominator;
 }
 
 float StatisticalAnalyzer::getCurrentTemperature() const {
-  int currentIndex = (envHistoryIndex - 1 + ENV_HISTORY_SIZE) % ENV_HISTORY_SIZE;
-  return tempHistory[currentIndex];
+  if (tempHistory.isEmpty()) {
+    return 20.0f; // Default room temperature
+  }
+  return tempHistory.newest();
 }
 
 float StatisticalAnalyzer::getCurrentHumidity() const {
-  int currentIndex = (envHistoryIndex - 1 + ENV_HISTORY_SIZE) % ENV_HISTORY_SIZE;
-  return humidityHistory[currentIndex];
+  if (humidityHistory.isEmpty()) {
+    return 50.0f; // Default humidity
+  }
+  return humidityHistory.newest();
 }
 
 float StatisticalAnalyzer::getEfficiencyScore(bool jamDetected) const {

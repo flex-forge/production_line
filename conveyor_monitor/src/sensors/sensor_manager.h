@@ -77,30 +77,99 @@ private:
   void generateVirtualGestureData();
   
 public:
+  /**
+   * @brief Constructor - initializes sensor manager with default values
+   */
   SensorManager();
   
-  // Initialize all sensors
+  /**
+   * @brief Initialize all I2C sensors and configure hardware
+   * @return true if all sensors initialized successfully, false if any failed
+   * @note In virtual sensor mode, always returns true even if physical sensors fail
+   */
   bool begin();
   
-  // Read all sensors
+  /**
+   * @brief Read all sensor data and update internal state
+   * @details Performs non-blocking reads from all available sensors:
+   *          - Rotary encoder (speed control)
+   *          - BME688 environmental sensor
+   *          - VL53L1X ToF distance sensor
+   *          - LSM9DS1 IMU for vibration analysis
+   *          - APDS9960 gesture and proximity sensor
+   */
   void readAll();
   
-  // Get processed values (const-correct)
+  /**
+   * @brief Get current conveyor speed in RPM
+   * @return Speed in RPM (0-100), calculated from encoder position offset
+   */
   float getConveyorSpeed() const { return currentSpeed_rpm; }
+  
+  /**
+   * @brief Get parts per minute count based on object detection
+   * @return Parts detected per minute, calculated from detection events
+   */
   int getPartsCount() const;
+  
+  /**
+   * @brief Get current vibration magnitude from IMU
+   * @return RMS vibration magnitude in g-force units
+   */
   float getVibrationMagnitude() const { return vibrationMagnitude; }
+  
+  /**
+   * @brief Get ambient temperature reading
+   * @return Temperature in degrees Celsius from BME688 sensor
+   */
   float getTemperature() const { return currentReadings.temperature; }
+  
+  /**
+   * @brief Get relative humidity reading
+   * @return Humidity percentage (0-100%) from BME688 sensor
+   */
   float getHumidity() const { return currentReadings.humidity; }
+  
+  /**
+   * @brief Get atmospheric pressure reading
+   * @return Pressure in hPa from BME688 sensor
+   */
   float getPressure() const { return currentReadings.pressure; }
+  
+  /**
+   * @brief Get air quality gas resistance reading
+   * @return Gas resistance in Ohms from BME688 sensor (higher = better air quality)
+   */
   uint32_t getAirQuality() const { return currentReadings.gasResistance; }
+  
+  /**
+   * @brief Check if operator is present near the system
+   * @return true if APDS9960 proximity sensor detects presence (>10 units)
+   */
   bool isOperatorPresent() const { return currentReadings.proximity > 10; }
+  
+  /**
+   * @brief Get the last detected gesture from operator
+   * @return GestureType enum (UP, DOWN, LEFT, RIGHT, WAVE, or NONE)
+   */
   GestureType getLastGesture() const { return lastGesture; }
   
-  // Get raw sensor data
+  /**
+   * @brief Get complete raw sensor readings structure
+   * @return Reference to SensorReadings with all current sensor values
+   */
   const SensorReadings& getRawReadings() const { return currentReadings; }
   
-  // Utility functions
+  /**
+   * @brief Clear the last detected gesture (mark as processed)
+   */
   void clearGesture() { lastGesture = GESTURE_NONE; }
+  
+  /**
+   * @brief Check health status of all sensors
+   * @return true if all sensors are responding correctly
+   * @details Validates sensor availability and logs any communication errors
+   */
   bool checkSensorHealth() const;
 };
 

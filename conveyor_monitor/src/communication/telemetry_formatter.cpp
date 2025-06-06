@@ -1,5 +1,6 @@
 #include "telemetry_formatter.h"
 #include "../utils/error_handling.h"
+#include "../utils/performance_utils.h"
 
 TelemetryFormatter::TelemetryFormatter() {
   // Constructor - no initialization needed
@@ -56,30 +57,36 @@ bool TelemetryFormatter::formatTelemetry(const SystemState& state, char* outputB
   float pressure = validateFloat(state.pressure, 1013.25f);
   uint32_t gas = state.gasResistance;
   
-  // Build JSON string using String concatenation for STM32 compatibility
-  String telemetryStr = "{";
+  // Use fast string builder for better performance
+  FastStringBuilder builder(outputBuffer, bufferSize);
   
-  appendFloatField(telemetryStr, "speed_rpm", speed, 1, false);
-  appendIntField(telemetryStr, "parts_per_min", state.partsPerMinute, false);
-  appendFloatField(telemetryStr, "vibration", vibration, 2, false);
-  appendFloatField(telemetryStr, "temp", temp, 1, false);
-  appendFloatField(telemetryStr, "humidity", humidity, 1, false);
-  appendFloatField(telemetryStr, "pressure", pressure, 1, false);
-  appendIntField(telemetryStr, "gas_resistance", gas, false);
-  appendBoolField(telemetryStr, "running", state.conveyorRunning, false);
-  appendBoolField(telemetryStr, "operator", state.operatorPresent, true);
+  builder.append("{\"speed_rpm\":")
+         .append(speed, 1)
+         .append(",\"parts_per_min\":")
+         .appendUInt(state.partsPerMinute)
+         .append(",\"vibration\":")
+         .append(vibration, 2)
+         .append(",\"temp\":")
+         .append(temp, 1)
+         .append(",\"humidity\":")
+         .append(humidity, 1)
+         .append(",\"pressure\":")
+         .append(pressure, 1)
+         .append(",\"gas_resistance\":")
+         .appendUInt(gas)
+         .append(",\"running\":")
+         .append(state.conveyorRunning)
+         .append(",\"operator\":")
+         .append(state.operatorPresent)
+         .append("}");
   
-  telemetryStr += "}";
-  
-  // Check if the result fits in the output buffer
-  if (telemetryStr.length() >= bufferSize) {
+  // Check if we ran out of space
+  if (builder.getLength() >= bufferSize - 1) {
     Serial.println(F("ERROR: Telemetry string too large for buffer"));
     LOG_ERROR(SystemError::BUFFER_OVERFLOW);
     return false;
   }
   
-  // Copy to output buffer
-  telemetryStr.toCharArray(outputBuffer, bufferSize);
   return true;
 }
 

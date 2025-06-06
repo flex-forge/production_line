@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include "../config/data_types.h"
 #include "../config/sensor_config.h"
+#include "../utils/circular_buffer.h"
 
 /**
  * @brief Specialized class for statistical analysis of sensor data
@@ -13,25 +14,19 @@
  */
 class StatisticalAnalyzer {
 private:
-  // Speed monitoring
-  static const int SPEED_HISTORY_SIZE = 10;
-  float speedHistory[SPEED_HISTORY_SIZE];
-  int speedHistoryIndex;
+  // Speed monitoring using circular buffer
+  CircularBuffer<float, 10> speedHistory;
   float averageSpeed;
   float speedVariance;
   
-  // Vibration analysis
-  static const int VIBRATION_HISTORY_SIZE = 30;
-  float vibrationHistory[VIBRATION_HISTORY_SIZE];
-  int vibrationHistoryIndex;
+  // Vibration analysis using circular buffer
+  CircularBuffer<float, 30> vibrationHistory;
   float vibrationBaseline;
   bool baselineEstablished;
   
-  // Environmental monitoring
-  static const int ENV_HISTORY_SIZE = 10;
-  float tempHistory[ENV_HISTORY_SIZE];
-  float humidityHistory[ENV_HISTORY_SIZE];
-  int envHistoryIndex;
+  // Environmental monitoring using circular buffers
+  CircularBuffer<float, 10> tempHistory;
+  CircularBuffer<float, 10> humidityHistory;
   
   /**
    * @brief Calculate mean of array data
