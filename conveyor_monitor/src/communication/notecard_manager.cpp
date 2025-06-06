@@ -95,11 +95,45 @@ bool NotecardManager::sendTelemetry(const char* jsonData) {
     JAddStringToObject(req, "file", "telemetry.qo");
     JAddBoolToObject(req, "sync", false); // Queue for periodic sync
     
-    // Create body object and add raw JSON string
+    // Parse the JSON data and add fields directly to note body
     J *body = JCreateObject();
     if (body) {
-      // Add the telemetry data as a JSON string that will be parsed server-side
-      JAddStringToObject(body, "telemetry", jsonData);
+      // Parse the incoming JSON string
+      J *telemetryJson = JParse(jsonData);
+      if (telemetryJson) {
+        // Add each telemetry field directly to the body
+        if (JHasObjectItem(telemetryJson, "speed_rpm")) {
+          JAddNumberToObject(body, "speed_rpm", JGetNumber(telemetryJson, "speed_rpm"));
+        }
+        if (JHasObjectItem(telemetryJson, "parts_per_min")) {
+          JAddNumberToObject(body, "parts_per_min", JGetNumber(telemetryJson, "parts_per_min"));
+        }
+        if (JHasObjectItem(telemetryJson, "vibration")) {
+          JAddNumberToObject(body, "vibration", JGetNumber(telemetryJson, "vibration"));
+        }
+        if (JHasObjectItem(telemetryJson, "temp")) {
+          JAddNumberToObject(body, "temp", JGetNumber(telemetryJson, "temp"));
+        }
+        if (JHasObjectItem(telemetryJson, "humidity")) {
+          JAddNumberToObject(body, "humidity", JGetNumber(telemetryJson, "humidity"));
+        }
+        if (JHasObjectItem(telemetryJson, "pressure")) {
+          JAddNumberToObject(body, "pressure", JGetNumber(telemetryJson, "pressure"));
+        }
+        if (JHasObjectItem(telemetryJson, "gas_resistance")) {
+          JAddNumberToObject(body, "gas_resistance", JGetNumber(telemetryJson, "gas_resistance"));
+        }
+        if (JHasObjectItem(telemetryJson, "running")) {
+          JAddBoolToObject(body, "running", JGetBool(telemetryJson, "running"));
+        }
+        if (JHasObjectItem(telemetryJson, "operator")) {
+          JAddBoolToObject(body, "operator", JGetBool(telemetryJson, "operator"));
+        }
+        
+        JDelete(telemetryJson);
+      }
+      
+      // Add timestamp
       JAddNumberToObject(body, "time", millis() / 1000);
       
       JAddItemToObject(req, "body", body);
