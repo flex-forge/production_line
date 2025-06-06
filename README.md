@@ -4,127 +4,104 @@
 
 The FlexForge Conveyor Management System is an IoT solution designed to monitor production line conveyors in real-time, preventing costly downtime through predictive maintenance and instant alerts. Built for the Blues Cygnet STM32L433 MCU with Blues Notecard connectivity.
 
-## Features
+## Key Features
 
-### Real-Time Monitoring
-- **Speed Monitoring**: Tracks conveyor speed via rotary encoder with anomaly detection
-- **Jam Detection**: Uses VL53L1X ToF sensor to detect stuck parts and blockages
-- **Vibration Analysis**: IMU-based predictive maintenance to detect bearing wear
-- **Environmental Tracking**: Monitors temperature, humidity, and air quality
-- **Operator Interface**: Gesture-based controls for acknowledging alerts
-
-### Smart Alerts
-- **Critical**: Immediate notification for jams, stops, and sensor failures
-- **Warning**: Periodic alerts for speed deviations and vibration trends
-- **Info**: Dashboard updates for environmental conditions and metrics
-
-### Cloud Connectivity
-- Cellular IoT via Blues Notecard
-- Automatic data aggregation and transmission
-- Remote monitoring dashboard
-- Historical trend analysis
+- **Real-Time Monitoring**: Speed, vibration, environmental conditions, and part detection
+- **Predictive Maintenance**: Advanced analytics and anomaly detection algorithms
+- **Instant Alerts**: Critical notifications for jams, anomalies, and sensor failures
+- **Operator Interface**: Gesture-based controls for system interaction
+- **Cloud Connectivity**: Cellular IoT via Blues Notecard with optimized telemetry
+- **Performance Optimized**: Circular buffers, fast string operations, and memory-efficient design
 
 ## Hardware Requirements
 
-- Blues Cygnet STM32L433 MCU
-- Blues Notecard (cellular IoT)
-- Rotary Encoder (conveyor speed simulation)
-- VL53L1X ToF Distance Sensor
-- LSM9DS1 9-DOF IMU
-- BME688 Environmental Sensor
-- APDS9960 Gesture Sensor
-- I2C connections for all sensors
+### Core Components
+- **MCU**: Blues Cygnet STM32L433
+- **Connectivity**: Blues Notecard (cellular IoT)
+- **Interface**: I2C bus (400kHz) with Qwiic connectors
 
-## Installation
+### Sensors
+- **Adafruit Seesaw Encoder**: Conveyor speed control/simulation (I2C 0x36)
+- **VL53L1X ToF Distance Sensor**: Part detection (I2C 0x29) 
+- **LSM9DS1 9-DOF IMU**: Vibration analysis (I2C 0x6B/0x1E)
+- **BME688 Environmental Sensor**: Temperature, humidity, pressure, air quality (I2C 0x76)
+- **APDS9960 Gesture Sensor**: Operator interface (I2C 0x39)
 
-1. Install Arduino IDE with STM32 support
-2. Install required libraries:
-   ```
-   - Notecard (Blues Wireless)
-   - Adafruit BME680
-   - VL53L1X (Pololu)
-   - SparkFun LSM9DS1
-   - SparkFun APDS9960
-   ```
-3. Configure Notecard with your ProductUID
-4. Upload firmware to Cygnet board
+## Build & Development
+
+### PlatformIO (Recommended)
+```bash
+# Build firmware
+pio run -e blues_cygnet
+
+# Upload firmware  
+pio run -e blues_cygnet -t upload
+
+# Serial monitor
+pio device monitor -b 115200
+
+# Clean build
+pio run -e blues_cygnet -t clean
+```
+
+### Arduino IDE
+- **Board**: Blues Cygnet (STM32L433)
+- **Port**: Auto-detect USB
+- **Upload**: Use STLink or USB DFU
+
+### Required Libraries
+- Notecard (Blues Wireless)
+- Adafruit BME680
+- VL53L1X (Pololu) 
+- SparkFun LSM9DS1
+- SparkFun APDS9960
+
+## Quick Start
+
+1. **Hardware Setup**: Connect all sensors via I2C/Qwiic
+2. **Notecard Config**: Set your ProductUID in system configuration
+3. **Build & Upload**: Use PlatformIO or Arduino IDE
+4. **Monitor**: Connect serial at 115200 baud for real-time status
 
 ## Configuration
 
-Edit `config.h` to adjust:
-- Conveyor speed parameters
-- Alert thresholds
-- Sensor sampling rates
-- Cloud sync intervals
+System configuration is modular and organized in `src/config/`:
+- **System settings**: Timing intervals, Notecard parameters
+- **Sensor parameters**: I2C addresses, sampling rates, thresholds
+- **Alert configuration**: Gesture mappings, alert levels
 
 ## Operation
 
-### Startup
-1. System initializes all sensors
-2. Establishes Notecard connection
-3. Begins monitoring
+### Operator Controls (Gesture Interface)
+- **Swipe Up**: Acknowledge jam clearance (30-second window)
+- **Swipe Left**: Resume system monitoring
+- **Swipe Right**: Pause system monitoring
 
-### Normal Operation
-- Continuous sensor monitoring
-- Local data processing and anomaly detection
-- Periodic cloud synchronization
-- Immediate alerts for critical conditions
+### System Status
+Monitor via serial output at 115200 baud for:
+- Sensor readings every 10 seconds
+- Cloud sync events every 60 seconds  
+- Real-time alerts and operator actions
+- Performance statistics every 5 minutes
 
-### Operator Gestures
-- **Swipe Up**: Acknowledge jam clearance
-- **Swipe Down**: Pause monitoring
-- **Wave**: Resume monitoring
+## Technical Documentation
 
-## Data Flow
+For detailed technical information, see **[SYSTEM_DOCUMENTATION.md](./SYSTEM_DOCUMENTATION.md)**:
 
-```
-Sensors → MCU Processing → Alert Detection → Notecard → Cloud Dashboard
-   ↓                              ↓                           ↓
-Raw Data                   Local Actions              Remote Monitoring
-```
+- **Code Architecture**: Directory structure, dependency flow, design patterns
+- **Sensor Operations**: Detailed sensor configurations and data processing
+- **Data Processing**: Statistical analysis, anomaly detection algorithms
+- **Performance Optimization**: Circular buffers, fast operations, memory management
+- **Testing Guide**: Comprehensive manual testing procedures
+- **Troubleshooting**: Common issues and debugging strategies
 
 ## Business Value
 
-1. **40% Reduction in Downtime**: Predictive alerts before failures
-2. **75% Faster Response**: Instant mobile notifications
-3. **Improved Maintenance**: Data-driven service schedules
-4. **Multi-Site Visibility**: Central monitoring dashboard
-5. **Compliance Tracking**: Complete audit trail
-
-## Technical Architecture
-
-### Firmware Structure
-- `conveyor_monitor.ino`: Main application loop
-- `sensor_manager`: Hardware abstraction for all sensors
-- `data_processor`: Analytics and anomaly detection
-- `notecard_manager`: Cloud connectivity handler
-- `alert_handler`: Alert generation and management
-
-### Monitoring Strategy
-- **Speed**: 10Hz sampling for immediate response
-- **Parts**: 5Hz detection with jam timeout
-- **Vibration**: 100Hz with FFT analysis
-- **Environment**: Slow changing, 0.1Hz
-- **Gestures**: Event-driven interrupts
-
-## Troubleshooting
-
-### Common Issues
-1. **No sensor readings**: Check I2C connections and addresses
-2. **No cloud sync**: Verify Notecard configuration and signal
-3. **False jam alerts**: Adjust PART_DETECT_THRESHOLD
-4. **Vibration noise**: Calibrate baseline in stable conditions
-
-### Debug Mode
-Enable serial output at 115200 baud for detailed logging.
-
-## Future Enhancements
-
-- Machine learning for anomaly detection
-- Multi-conveyor synchronization
-- Predictive part ordering integration
-- AR maintenance guidance
-- Energy harvesting options
+- **40% Reduction in Downtime**: Predictive alerts before failures
+- **75% Faster Response**: Instant mobile notifications  
+- **Improved Maintenance**: Data-driven service schedules
+- **Multi-Site Visibility**: Central monitoring dashboard
+- **Compliance Tracking**: Complete audit trail
 
 ## License
 
