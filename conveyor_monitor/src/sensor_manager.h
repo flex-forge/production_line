@@ -21,7 +21,7 @@ private:
   
   // Encoder variables
   int32_t encoderPosition;
-  int32_t lastEncoderPosition;
+  int32_t baselineEncoderPosition;  // Position at startup (zero speed)
   unsigned long lastEncoderTime;
   float currentSpeed_rpm;
   

@@ -12,10 +12,10 @@ private:
   float averageSpeed;
   float speedVariance;
   
-  // Jam detection
-  unsigned long lastMovementTime;
-  uint16_t lastDistance;
-  int stuckPartCount;
+  // Jam detection (vibration-based)
+  unsigned long lowVibrationStartTime;
+  bool wasRunning;
+  bool inLowVibrationState;
   
   // Vibration analysis
   float vibrationBaseline;
@@ -49,7 +49,7 @@ public:
   float getAverageSpeed() { return averageSpeed; }
   float getSpeedStability() { return speedVariance; }
   float getVibrationTrend();
-  bool isJamDetected() { return stuckPartCount > 3; }
+  bool isJamDetected() { return inLowVibrationState; }
   
   // Get predictions
   float predictMaintenanceHours();

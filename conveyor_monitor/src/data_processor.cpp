@@ -4,9 +4,9 @@ DataProcessor::DataProcessor() {
   speedHistoryIndex = 0;
   averageSpeed = 0.0;
   speedVariance = 0.0;
-  lastMovementTime = 0;
-  lastDistance = 0;
-  stuckPartCount = 0;
+  lowVibrationStartTime = 0;
+  wasRunning = false;
+  inLowVibrationState = false;
   vibrationBaseline = VIBRATION_BASELINE_G;
   vibrationHistoryIndex = 0;
   baselineEstablished = false;
@@ -25,7 +25,7 @@ void DataProcessor::begin() {
     vibrationHistory[i] = VIBRATION_BASELINE_G;
   }
   
-  lastMovementTime = millis();
+  lowVibrationStartTime = millis();
 }
 
 void DataProcessor::update(const SystemState& state) {
@@ -52,15 +52,48 @@ void DataProcessor::update(const SystemState& state) {
   humidityHistory[envHistoryIndex] = state.humidity;
   envHistoryIndex = (envHistoryIndex + 1) % 10;
   
-  // Check for movement (jam detection)
-  if (state.conveyorRunning && state.partsPerMinute == 0) {
-    if (millis() - lastMovementTime > JAM_DETECT_TIME_MS) {
-      stuckPartCount++;
+  // Vibration-based jam detection
+  unsigned long currentTime = millis();
+  
+  // Check if belt should be running but vibration is too low
+  if (state.conveyorRunning && state.speed_rpm > MIN_SPEED_THRESHOLD) {
+    if (state.vibrationLevel < JAM_VIBRATION_THRESHOLD) {
+      // Low vibration while running - potential jam
+      if (!inLowVibrationState) {
+        // Just entered low vibration state
+        lowVibrationStartTime = currentTime;
+        inLowVibrationState = true;
+        Serial.print(F("Jam detection: Low vibration detected ("));
+        Serial.print(state.vibrationLevel);
+        Serial.print(F("g < "));
+        Serial.print(JAM_VIBRATION_THRESHOLD);
+        Serial.println(F("g) while running"));
+      } else {
+        // Check if we've been in low vibration state long enough
+        if (currentTime - lowVibrationStartTime > JAM_DETECT_TIME_MS) {
+          // Jam confirmed - vibration has been low for too long
+          static unsigned long lastJamMsg = 0;
+          if (currentTime - lastJamMsg > 5000) { // Don't spam
+            Serial.println(F("JAM DETECTED: Low vibration for extended period"));
+            lastJamMsg = currentTime;
+          }
+        }
+      }
+    } else {
+      // Vibration is normal - reset jam detection
+      if (inLowVibrationState) {
+        Serial.println(F("Jam detection: Vibration returned to normal"));
+      }
+      inLowVibrationState = false;
+      lowVibrationStartTime = currentTime;
     }
   } else {
-    lastMovementTime = millis();
-    stuckPartCount = 0;
+    // Belt is not supposed to be running - reset jam detection
+    inLowVibrationState = false;
+    lowVibrationStartTime = currentTime;
   }
+  
+  wasRunning = state.conveyorRunning;
 }
 
 bool DataProcessor::detectSpeedAnomaly() {
@@ -79,8 +112,10 @@ bool DataProcessor::detectSpeedAnomaly() {
 }
 
 bool DataProcessor::detectJam() {
-  // Jam is detected if parts aren't moving for extended period
-  return (stuckPartCount > 3);
+  // Vibration-based jam detection
+  // Jam is detected if belt should be running but vibration is too low for extended period
+  unsigned long currentTime = millis();
+  return inLowVibrationState && (currentTime - lowVibrationStartTime > JAM_DETECT_TIME_MS);
 }
 
 bool DataProcessor::detectVibrationAnomaly() {
@@ -207,9 +242,9 @@ float DataProcessor::getEfficiencyScore() {
     vibrationScore = 100.0 * (1.0 - (currentVibration / VIBRATION_CRITICAL_G));
   }
   
-  // Jam score (penalize recent jams)
-  if (stuckPartCount > 0) {
-    jamScore = max(0.0f, 100.0f - (stuckPartCount * 20.0f));
+  // Jam score (penalize current jam state)
+  if (inLowVibrationState) {
+    jamScore = 0.0f; // Significant penalty for active jam
   }
   
   // Weighted average

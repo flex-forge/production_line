@@ -13,7 +13,7 @@
 #define HEALTH_CHECK_INTERVAL    30000  // 30 seconds health check
 
 // Sensor I2C addresses
-#define BME688_I2C_ADDR         0x77    // Environmental sensor
+#define BME688_I2C_ADDR         0x76    // Environmental sensor
 #define VL53L1X_I2C_ADDR        0x29    // ToF distance sensor
 #define LSM9DS1_AG_I2C_ADDR     0x6B    // Accel/Gyro
 #define LSM9DS1_M_I2C_ADDR      0x1E    // Magnetometer
@@ -31,7 +31,8 @@
 // Part detection parameters
 #define PART_DISTANCE_MM         50      // Expected distance to parts
 #define PART_DETECT_THRESHOLD    100     // Detection distance threshold
-#define JAM_DETECT_TIME_MS       5000    // Time without movement = jam
+#define JAM_DETECT_TIME_MS       10000   // Time with low vibration = jam (10 seconds)
+#define JAM_VIBRATION_THRESHOLD  0.3     // Vibration level below which indicates jam (g)
 #define EXPECTED_PARTS_PER_MIN   30      // Normal production rate
 
 // Vibration analysis parameters
@@ -88,6 +89,8 @@ struct SystemState {
   float vibrationLevel;
   float temperature;
   float humidity;
+  float pressure;
+  uint32_t gasResistance;
   unsigned long lastJamTime;
   bool operatorPresent;
 };

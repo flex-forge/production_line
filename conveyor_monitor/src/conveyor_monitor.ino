@@ -40,6 +40,8 @@ SystemState currentState = {
   .vibrationLevel = 0.0,
   .temperature = 0.0,
   .humidity = 0.0,
+  .pressure = 0.0,
+  .gasResistance = 0,
   .lastJamTime = 0,
   .operatorPresent = false
 };
@@ -96,6 +98,7 @@ void loop() {
   // Sync to cloud at low frequency (or immediately for alerts)
   if (currentMillis - lastCloudSync >= CLOUD_SYNC_INTERVAL || alertHandler.hasPendingAlerts()) {
     lastCloudSync = currentMillis;
+    Serial.println(F("=== Cloud Sync Triggered ==="));
     syncToCloud();
   }
   
@@ -120,7 +123,25 @@ void readSensors() {
   currentState.vibrationLevel = sensorManager.getVibrationMagnitude();
   currentState.temperature = sensorManager.getTemperature();
   currentState.humidity = sensorManager.getHumidity();
+  currentState.pressure = sensorManager.getPressure();
+  currentState.gasResistance = sensorManager.getAirQuality();
   currentState.operatorPresent = sensorManager.isOperatorPresent();
+  
+  // Debug telemetry values
+  static unsigned long lastDebug = 0;
+  if (millis() - lastDebug > 10000) { // Every 10 seconds
+    Serial.println(F("=== Sensor Readings ==="));
+    Serial.print(F("Speed: ")); Serial.println(currentState.speed_rpm);
+    Serial.print(F("Parts/min: ")); Serial.println(currentState.partsPerMinute);
+    Serial.print(F("Vibration: ")); Serial.println(currentState.vibrationLevel);
+    Serial.print(F("Temperature: ")); Serial.println(currentState.temperature);
+    Serial.print(F("Humidity: ")); Serial.println(currentState.humidity);
+    Serial.print(F("Pressure: ")); Serial.println(currentState.pressure);
+    Serial.print(F("Gas Resistance: ")); Serial.println(currentState.gasResistance);
+    Serial.print(F("Running: ")); Serial.println(currentState.conveyorRunning);
+    Serial.print(F("Operator: ")); Serial.println(currentState.operatorPresent);
+    lastDebug = millis();
+  }
 }
 
 void processData() {
@@ -152,19 +173,48 @@ void checkAlerts() {
 }
 
 void syncToCloud() {
-  // Prepare telemetry data
+  // Debug raw currentState values before validation
+  Serial.print(F("currentState raw - Speed: ")); Serial.print(currentState.speed_rpm);
+  Serial.print(F(", Vibration: ")); Serial.print(currentState.vibrationLevel);
+  Serial.print(F(", Temp: ")); Serial.print(currentState.temperature);
+  Serial.print(F(", Humidity: ")); Serial.print(currentState.humidity);
+  Serial.print(F(", Pressure: ")); Serial.print(currentState.pressure);
+  Serial.print(F(", Gas: ")); Serial.println(currentState.gasResistance);
+  
+  // Validate and ensure finite values before JSON creation
+  float speed = (isnan(currentState.speed_rpm) || !isfinite(currentState.speed_rpm)) ? 0.0 : currentState.speed_rpm;
+  float vibration = (isnan(currentState.vibrationLevel) || !isfinite(currentState.vibrationLevel)) ? 0.0 : currentState.vibrationLevel;
+  float temp = (isnan(currentState.temperature) || !isfinite(currentState.temperature)) ? 22.0 : currentState.temperature;
+  float humidity = (isnan(currentState.humidity) || !isfinite(currentState.humidity)) ? 50.0 : currentState.humidity;
+  float pressure = (isnan(currentState.pressure) || !isfinite(currentState.pressure)) ? 1013.25 : currentState.pressure;
+  uint32_t gas = currentState.gasResistance;
+  
+  // Prepare telemetry data using String concatenation for float compatibility
+  String telemetryStr = "{\"speed_rpm\":";
+  telemetryStr += String(speed, 1);
+  telemetryStr += ",\"parts_per_min\":";
+  telemetryStr += String(currentState.partsPerMinute);
+  telemetryStr += ",\"vibration\":";
+  telemetryStr += String(vibration, 2);
+  telemetryStr += ",\"temp\":";
+  telemetryStr += String(temp, 1);
+  telemetryStr += ",\"humidity\":";
+  telemetryStr += String(humidity, 1);
+  telemetryStr += ",\"pressure\":";
+  telemetryStr += String(pressure, 1);
+  telemetryStr += ",\"gas_resistance\":";
+  telemetryStr += String(gas);
+  telemetryStr += ",\"running\":";
+  telemetryStr += currentState.conveyorRunning ? "true" : "false";
+  telemetryStr += ",\"operator\":";
+  telemetryStr += currentState.operatorPresent ? "true" : "false";
+  telemetryStr += "}";
+  
   char telemetryData[512];
-  snprintf(telemetryData, sizeof(telemetryData),
-    "{\"speed_rpm\":%.1f,\"parts_per_min\":%d,\"vibration\":%.2f,"
-    "\"temp\":%.1f,\"humidity\":%.1f,\"running\":%s,\"operator\":%s}",
-    currentState.speed_rpm,
-    currentState.partsPerMinute,
-    currentState.vibrationLevel,
-    currentState.temperature,
-    currentState.humidity,
-    currentState.conveyorRunning ? "true" : "false",
-    currentState.operatorPresent ? "true" : "false"
-  );
+  telemetryStr.toCharArray(telemetryData, sizeof(telemetryData));
+  
+  Serial.print(F("Telemetry JSON: "));
+  Serial.println(telemetryData);
   
   // Send regular telemetry
   notecardManager.sendTelemetry(telemetryData);

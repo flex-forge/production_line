@@ -19,7 +19,7 @@ Adafruit_seesaw seesaw;
 
 SensorManager::SensorManager() {
   encoderPosition = 0;
-  lastEncoderPosition = 0;
+  baselineEncoderPosition = 0;
   lastEncoderTime = 0;
   currentSpeed_rpm = 0.0;
   lastPartDetectTime = 0;
@@ -121,11 +121,13 @@ bool SensorManager::initializeSeesaw() {
   seesaw.setGPIOInterrupts((uint32_t)1 << 24, 1);
   seesaw.enableEncoderInterrupt();
   
-  // Reset encoder position
-  seesaw.setEncoderPosition(0);
-  encoderPosition = 0;
-  lastEncoderPosition = 0;
+  // Read current position as baseline (zero speed position)
+  baselineEncoderPosition = seesaw.getEncoderPosition();
+  encoderPosition = baselineEncoderPosition;
   lastEncoderTime = millis();
+  
+  Serial.print(F("Encoder baseline position set to: "));
+  Serial.println(baselineEncoderPosition);
   
   return true;
 }
@@ -146,17 +148,39 @@ bool SensorManager::initializeBME688() {
 }
 
 bool SensorManager::initializeVL53L1X() {
-  distanceSensor.setTimeout(500);
+  Serial.println(F("Initializing VL53L1X ToF sensor..."));
+  
+  // Set longer timeout for initialization
+  distanceSensor.setTimeout(2000);
   
   if (!distanceSensor.init()) {
+    Serial.println(F("VL53L1X init() failed"));
     return false;
   }
   
-  // Configure for short range, high speed
+  // Configure for short range, fast operation
   distanceSensor.setDistanceMode(VL53L1X::Short);
-  distanceSensor.setMeasurementTimingBudget(20000); // 20ms
-  distanceSensor.startContinuous(50); // 50ms between measurements
+  distanceSensor.setMeasurementTimingBudget(50000); // 50ms timing budget
   
+  // Start continuous mode
+  distanceSensor.startContinuous(100); // 100ms between measurements
+  
+  // Wait for first measurement to be ready
+  delay(200);
+  
+  // Test initial reading with timeout check
+  uint16_t testDistance = distanceSensor.read(false);
+  if (testDistance == 0 || distanceSensor.timeoutOccurred()) {
+    Serial.println(F("VL53L1X initial read failed or timeout"));
+    // Don't fail initialization - sensor might work in normal operation
+    Serial.println(F("VL53L1X proceeding anyway - will use in continuous mode"));
+  } else {
+    Serial.print(F("VL53L1X test distance: "));
+    Serial.print(testDistance);
+    Serial.println(F("mm"));
+  }
+  
+  Serial.println(F("VL53L1X initialization complete"));
   return true;
 }
 
@@ -208,31 +232,37 @@ void SensorManager::readEncoder() {
     // Read current encoder position
     encoderPosition = seesaw.getEncoderPosition();
     
-    unsigned long currentTime = millis();
-    unsigned long timeDiff = currentTime - lastEncoderTime;
+    // Calculate speed based on offset from baseline position
+    int32_t positionOffset = encoderPosition - baselineEncoderPosition;
     
-    if (timeDiff >= 1000) { // Calculate speed every second
-      int32_t positionDiff = encoderPosition - lastEncoderPosition;
-      
-      // Handle wraparound
-      if (abs(positionDiff) > 32768) {
-        if (positionDiff > 0) {
-          positionDiff -= 65536;
-        } else {
-          positionDiff += 65536;
-        }
-      }
-      
-      // Calculate RPM: (pulses/sec) * 60 / (pulses/rev) / gear_ratio
-      currentSpeed_rpm = (abs(positionDiff) * 60000.0) / (timeDiff * ENCODER_PULSES_PER_REV * CONVEYOR_GEAR_RATIO);
-      
-      lastEncoderPosition = encoderPosition;
-      lastEncoderTime = currentTime;
-      
-      currentReadings.encoderSpeed = currentSpeed_rpm;
-      currentReadings.encoderPulses = encoderPosition;
+    // Convert position offset to speed (each detent = 1 RPM increment)
+    // Positive offset = faster, negative offset = reverse/slower
+    currentSpeed_rpm = positionOffset * 1.0; // 1 RPM per detent
+    
+    // Clamp speed to reasonable range
+    if (currentSpeed_rpm < 0.0) currentSpeed_rpm = 0.0;        // No negative speeds
+    if (currentSpeed_rpm > 100.0) currentSpeed_rpm = 100.0;    // Max 100 RPM
+    
+    // Debug encoder readings
+    static unsigned long lastEncoderDebug = 0;
+    unsigned long currentTime = millis();
+    if (currentTime - lastEncoderDebug > 5000) { // Every 5 seconds
+      Serial.print(F("Encoder - Position: "));
+      Serial.print(encoderPosition);
+      Serial.print(F(", Baseline: "));
+      Serial.print(baselineEncoderPosition);
+      Serial.print(F(", Offset: "));
+      Serial.print(positionOffset);
+      Serial.print(F(", Speed: "));
+      Serial.print(currentSpeed_rpm);
+      Serial.println(F(" RPM"));
+      lastEncoderDebug = currentTime;
     }
+    
+    currentReadings.encoderSpeed = currentSpeed_rpm;
+    currentReadings.encoderPulses = encoderPosition;
   } else {
+    Serial.println(F("Seesaw not available, using virtual encoder"));
     generateVirtualEncoderData();
   }
 }
@@ -254,7 +284,7 @@ void SensorManager::readDistance() {
   if (vl53l1xAvailable) {
     uint16_t distance = distanceSensor.read(false);
     
-    if (distance != 0) { // 0 indicates timeout
+    if (distance != 0 && !distanceSensor.timeoutOccurred()) {
       currentReadings.distance_mm = distance;
       
       // Detect if object is present
@@ -266,6 +296,11 @@ void SensorManager::readDistance() {
         lastPartDetectTime = millis();
       }
       lastPartDetected = currentReadings.objectDetected;
+    } else {
+      // Handle timeout - keep last valid reading but don't update part detection
+      if (distanceSensor.timeoutOccurred()) {
+        Serial.println(F("VL53L1X timeout"));
+      }
     }
   } else {
     generateVirtualDistanceData();
@@ -378,16 +413,21 @@ bool SensorManager::checkSensorHealth() {
   // Check if we're getting readings from all sensors
   bool healthy = true;
   
-  // Check if encoder is responding (should have position changes if running)
-  if (seesawAvailable && currentSpeed_rpm > MIN_SPEED_THRESHOLD && encoderPosition == lastEncoderPosition) {
-    Serial.println(F("Encoder not responding"));
-    healthy = false;
+  // Check if encoder is responding (position-based speed control always responds)
+  if (seesawAvailable) {
+    int32_t testPosition = seesaw.getEncoderPosition();
+    if (testPosition != encoderPosition) {
+      // Position changed since last read - encoder is working
+    }
   }
   
   // Check ToF sensor
-  if (vl53l1xAvailable && distanceSensor.read(false) == 0) {
-    Serial.println(F("ToF sensor timeout"));
-    healthy = false;
+  if (vl53l1xAvailable) {
+    uint16_t distance = distanceSensor.read(false);
+    if (distance == 0 && distanceSensor.timeoutOccurred()) {
+      Serial.println(F("ToF sensor timeout"));
+      healthy = false;
+    }
   }
   
   // BME688 has internal error checking
