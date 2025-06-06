@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 #include <Notecard.h>
-#include "config.h"
+#include "../config/config.h"
 
 // Notecard Serial configuration
 #define NOTECARD_SERIAL Serial1

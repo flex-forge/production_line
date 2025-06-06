@@ -1,5 +1,5 @@
 #include "sensor_manager.h"
-#include "error_handling.h"
+#include "../utils/error_handling.h"
 #include <Wire.h>
 #include <Adafruit_BME680.h>
 #include <VL53L1X.h>

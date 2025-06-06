@@ -2,7 +2,7 @@
 #define DATA_PROCESSOR_H
 
 #include <Arduino.h>
-#include "data_types.h"
+#include "../config/data_types.h"
 #include "anomaly_detector.h"
 #include "statistical_analyzer.h"
 

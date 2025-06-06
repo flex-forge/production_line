@@ -14,13 +14,13 @@
 
 #include <Wire.h>
 #include <Notecard.h>
-#include "config.h"
-#include "sensor_manager.h"
-#include "data_processor.h"
-#include "notecard_manager.h"
-#include "alert_handler.h"
-#include "telemetry_formatter.h"
-#include "error_handling.h"
+#include "config/config.h"
+#include "sensors/sensor_manager.h"
+#include "data_processing/data_processor.h"
+#include "communication/notecard_manager.h"
+#include "alerts/alert_handler.h"
+#include "communication/telemetry_formatter.h"
+#include "utils/error_handling.h"
 
 // Global objects
 SensorManager sensorManager;

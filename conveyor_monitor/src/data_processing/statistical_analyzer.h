@@ -2,8 +2,8 @@
 #define STATISTICAL_ANALYZER_H
 
 #include <Arduino.h>
-#include "data_types.h"
-#include "sensor_config.h"
+#include "../config/data_types.h"
+#include "../config/sensor_config.h"
 
 /**
  * @brief Specialized class for statistical analysis of sensor data

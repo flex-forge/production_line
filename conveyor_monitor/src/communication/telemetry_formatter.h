@@ -2,7 +2,7 @@
 #define TELEMETRY_FORMATTER_H
 
 #include <Arduino.h>
-#include "data_types.h"
+#include "../config/data_types.h"
 
 /**
  * @brief Handles telemetry data formatting and validation

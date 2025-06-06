@@ -1,5 +1,5 @@
 #include "telemetry_formatter.h"
-#include "error_handling.h"
+#include "../utils/error_handling.h"
 
 TelemetryFormatter::TelemetryFormatter() {
   // Constructor - no initialization needed
