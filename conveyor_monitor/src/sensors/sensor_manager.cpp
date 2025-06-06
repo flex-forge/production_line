@@ -142,30 +142,17 @@ bool SensorManager::initializeVL53L1X() {
     Serial.println(F("VL53L1X init() failed"));
     return false;
   }
-  
+
   // Configure for short range, fast operation
   distanceSensor.setDistanceMode(VL53L1X::Short);
   distanceSensor.setMeasurementTimingBudget(50000); // 50ms timing budget
-  
+
   // Start continuous mode
   distanceSensor.startContinuous(100); // 100ms between measurements
-  
+
   // Wait for first measurement to be ready
   delay(200);
-  
-  // Test initial reading with timeout check
-  uint16_t testDistance = distanceSensor.read(false);
-  if (testDistance == 0 || distanceSensor.timeoutOccurred()) {
-    Serial.println(F("VL53L1X initial read failed or timeout"));
-    // Don't fail initialization - sensor might work in normal operation
-    Serial.println(F("VL53L1X proceeding anyway - will use in continuous mode"));
-  } else {
-    Serial.print(F("VL53L1X test distance: "));
-    Serial.print(testDistance);
-    Serial.println(F("mm"));
-  }
-  
-  Serial.println(F("VL53L1X initialization complete"));
+
   return true;
 }
 
