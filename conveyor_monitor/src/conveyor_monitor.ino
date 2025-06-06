@@ -19,12 +19,14 @@
 #include "data_processor.h"
 #include "notecard_manager.h"
 #include "alert_handler.h"
+#include "telemetry_formatter.h"
 
 // Global objects
 SensorManager sensorManager;
 DataProcessor dataProcessor;
 NotecardManager notecardManager;
 AlertHandler alertHandler;
+TelemetryFormatter telemetryFormatter;
 
 // Timing variables
 unsigned long lastSensorRead = 0;
@@ -130,16 +132,7 @@ void readSensors() {
   // Debug telemetry values
   static unsigned long lastDebug = 0;
   if (millis() - lastDebug > 10000) { // Every 10 seconds
-    Serial.println(F("=== Sensor Readings ==="));
-    Serial.print(F("Speed: ")); Serial.println(currentState.speed_rpm);
-    Serial.print(F("Parts/min: ")); Serial.println(currentState.partsPerMinute);
-    Serial.print(F("Vibration: ")); Serial.println(currentState.vibrationLevel);
-    Serial.print(F("Temperature: ")); Serial.println(currentState.temperature);
-    Serial.print(F("Humidity: ")); Serial.println(currentState.humidity);
-    Serial.print(F("Pressure: ")); Serial.println(currentState.pressure);
-    Serial.print(F("Gas Resistance: ")); Serial.println(currentState.gasResistance);
-    Serial.print(F("Running: ")); Serial.println(currentState.conveyorRunning);
-    Serial.print(F("Operator: ")); Serial.println(currentState.operatorPresent);
+    telemetryFormatter.printDebugInfo(currentState);
     lastDebug = millis();
   }
 }
@@ -173,51 +166,20 @@ void checkAlerts() {
 }
 
 void syncToCloud() {
-  // Debug raw currentState values before validation
-  Serial.print(F("currentState raw - Speed: ")); Serial.print(currentState.speed_rpm);
-  Serial.print(F(", Vibration: ")); Serial.print(currentState.vibrationLevel);
-  Serial.print(F(", Temp: ")); Serial.print(currentState.temperature);
-  Serial.print(F(", Humidity: ")); Serial.print(currentState.humidity);
-  Serial.print(F(", Pressure: ")); Serial.print(currentState.pressure);
-  Serial.print(F(", Gas: ")); Serial.println(currentState.gasResistance);
+  // Validate system state and print debug info
+  telemetryFormatter.validateSystemState(currentState);
   
-  // Validate and ensure finite values before JSON creation
-  float speed = (isnan(currentState.speed_rpm) || !isfinite(currentState.speed_rpm)) ? 0.0 : currentState.speed_rpm;
-  float vibration = (isnan(currentState.vibrationLevel) || !isfinite(currentState.vibrationLevel)) ? 0.0 : currentState.vibrationLevel;
-  float temp = (isnan(currentState.temperature) || !isfinite(currentState.temperature)) ? 22.0 : currentState.temperature;
-  float humidity = (isnan(currentState.humidity) || !isfinite(currentState.humidity)) ? 50.0 : currentState.humidity;
-  float pressure = (isnan(currentState.pressure) || !isfinite(currentState.pressure)) ? 1013.25 : currentState.pressure;
-  uint32_t gas = currentState.gasResistance;
-  
-  // Prepare telemetry data using String concatenation for float compatibility
-  String telemetryStr = "{\"speed_rpm\":";
-  telemetryStr += String(speed, 1);
-  telemetryStr += ",\"parts_per_min\":";
-  telemetryStr += String(currentState.partsPerMinute);
-  telemetryStr += ",\"vibration\":";
-  telemetryStr += String(vibration, 2);
-  telemetryStr += ",\"temp\":";
-  telemetryStr += String(temp, 1);
-  telemetryStr += ",\"humidity\":";
-  telemetryStr += String(humidity, 1);
-  telemetryStr += ",\"pressure\":";
-  telemetryStr += String(pressure, 1);
-  telemetryStr += ",\"gas_resistance\":";
-  telemetryStr += String(gas);
-  telemetryStr += ",\"running\":";
-  telemetryStr += currentState.conveyorRunning ? "true" : "false";
-  telemetryStr += ",\"operator\":";
-  telemetryStr += currentState.operatorPresent ? "true" : "false";
-  telemetryStr += "}";
-  
+  // Format telemetry data using the formatter
   char telemetryData[512];
-  telemetryStr.toCharArray(telemetryData, sizeof(telemetryData));
-  
-  Serial.print(F("Telemetry JSON: "));
-  Serial.println(telemetryData);
-  
-  // Send regular telemetry
-  notecardManager.sendTelemetry(telemetryData);
+  if (telemetryFormatter.formatTelemetry(currentState, telemetryData, sizeof(telemetryData))) {
+    Serial.print(F("Telemetry JSON: "));
+    Serial.println(telemetryData);
+    
+    // Send regular telemetry
+    notecardManager.sendTelemetry(telemetryData);
+  } else {
+    Serial.println(F("ERROR: Failed to format telemetry data"));
+  }
   
   // Send any pending alerts
   alertHandler.sendPendingAlerts();

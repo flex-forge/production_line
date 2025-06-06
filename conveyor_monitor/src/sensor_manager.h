@@ -49,6 +49,17 @@ private:
   bool initializeLSM9DS1();
   bool initializeAPDS9960();
   
+  /**
+   * @brief Helper method for consistent sensor initialization handling
+   * @param initFunc Pointer to sensor-specific initialization function
+   * @param availabilityFlag Reference to the sensor availability flag
+   * @param sensorName Human-readable sensor name for logging
+   * @param virtualFallbackMsg Message to display when falling back to virtual data
+   * @return true if sensor initialized successfully, false otherwise
+   */
+  bool initializeSensorWithFallback(bool (SensorManager::*initFunc)(), bool& availabilityFlag, 
+                                   const char* sensorName, const char* virtualFallbackMsg);
+  
   void readEncoder();
   void readEnvironmental();
   void readDistance();

@@ -38,60 +38,39 @@ SensorManager::SensorManager() {
   apds9960Available = false;
 }
 
+bool SensorManager::initializeSensorWithFallback(bool (SensorManager::*initFunc)(), bool& availabilityFlag, 
+                                                const char* sensorName, const char* virtualFallbackMsg) {
+  availabilityFlag = (this->*initFunc)();
+  if (!availabilityFlag) {
+    Serial.print(sensorName);
+    Serial.println(F(" init failed"));
+    #if VIRTUAL_SENSOR
+      Serial.print(F("  -> Using "));
+      Serial.println(virtualFallbackMsg);
+    #endif
+  }
+  return availabilityFlag;
+}
+
 bool SensorManager::begin() {
   Serial.println(F("Initializing sensors..."));
   bool allSensorsOk = true;
 
-  // Initialize I2C sensors
-  seesawAvailable = initializeSeesaw();
-  if (!seesawAvailable) {
-    Serial.println(F("Seesaw encoder init failed"));
-    #if VIRTUAL_SENSOR
-      Serial.println(F("  -> Using virtual encoder data"));
-    #else
-      allSensorsOk = false;
-    #endif
-  }
-
-  bme688Available = initializeBME688();
-  if (!bme688Available) {
-    Serial.println(F("BME688 init failed"));
-    #if VIRTUAL_SENSOR
-      Serial.println(F("  -> Using virtual environmental data"));
-    #else
-      allSensorsOk = false;
-    #endif
-  }
-
-  vl53l1xAvailable = initializeVL53L1X();
-  if (!vl53l1xAvailable) {
-    Serial.println(F("VL53L1X init failed"));
-    #if VIRTUAL_SENSOR
-      Serial.println(F("  -> Using virtual distance data"));
-    #else
-      allSensorsOk = false;
-    #endif
-  }
-
-  lsm9ds1Available = initializeLSM9DS1();
-  if (!lsm9ds1Available) {
-    Serial.println(F("LSM9DS1 init failed"));
-    #if VIRTUAL_SENSOR
-      Serial.println(F("  -> Using virtual IMU data"));
-    #else
-      allSensorsOk = false;
-    #endif
-  }
-
-  apds9960Available = initializeAPDS9960();
-  if (!apds9960Available) {
-    Serial.println(F("APDS9960 init failed"));
-    #if VIRTUAL_SENSOR
-      Serial.println(F("  -> Using virtual gesture data"));
-    #else
-      allSensorsOk = false;
-    #endif
-  }
+  // Initialize I2C sensors using helper method to reduce duplication
+  allSensorsOk &= initializeSensorWithFallback(&SensorManager::initializeSeesaw, seesawAvailable, 
+                                              "Seesaw encoder", "virtual encoder data");
+  
+  allSensorsOk &= initializeSensorWithFallback(&SensorManager::initializeBME688, bme688Available, 
+                                              "BME688", "virtual environmental data");
+  
+  allSensorsOk &= initializeSensorWithFallback(&SensorManager::initializeVL53L1X, vl53l1xAvailable, 
+                                              "VL53L1X", "virtual distance data");
+  
+  allSensorsOk &= initializeSensorWithFallback(&SensorManager::initializeLSM9DS1, lsm9ds1Available, 
+                                              "LSM9DS1", "virtual IMU data");
+  
+  allSensorsOk &= initializeSensorWithFallback(&SensorManager::initializeAPDS9960, apds9960Available, 
+                                              "APDS9960", "virtual gesture data");
 
   #if VIRTUAL_SENSOR
     Serial.println(F("Sensor initialization complete (virtual mode enabled)"));
