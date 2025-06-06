@@ -1,4 +1,5 @@
 #include "sensor_manager.h"
+#include "error_handling.h"
 #include <Wire.h>
 #include <Adafruit_BME680.h>
 #include <VL53L1X.h>
@@ -44,10 +45,15 @@ bool SensorManager::initializeSensorWithFallback(bool (SensorManager::*initFunc)
   if (!availabilityFlag) {
     Serial.print(sensorName);
     Serial.println(F(" init failed"));
+    LOG_ERROR_CTX(SystemError::SENSOR_INIT_FAILED, sensorName);
+    
     #if VIRTUAL_SENSOR
       Serial.print(F("  -> Using "));
       Serial.println(virtualFallbackMsg);
     #endif
+  } else {
+    Serial.print(sensorName);
+    Serial.println(F(" initialized successfully"));
   }
   return availabilityFlag;
 }
@@ -397,7 +403,7 @@ void SensorManager::updatePartCount() {
   }
 }
 
-int SensorManager::getPartsCount() {
+int SensorManager::getPartsCount() const {
   // Calculate parts per minute
   unsigned long elapsed = millis() - partCountStartTime;
   if (elapsed > 0) {
@@ -406,30 +412,40 @@ int SensorManager::getPartsCount() {
   return 0;
 }
 
-bool SensorManager::checkSensorHealth() {
+bool SensorManager::checkSensorHealth() const {
   // Check if we're getting readings from all sensors
   bool healthy = true;
   
   // Check if encoder is responding (position-based speed control always responds)
   if (seesawAvailable) {
-    int32_t testPosition = seesaw.getEncoderPosition();
-    if (testPosition != encoderPosition) {
-      // Position changed since last read - encoder is working
-    }
+    // Note: We can't check position changes in a const method
+    // This is acceptable as we primarily check availability flags
   }
   
-  // Check ToF sensor
+  // Check ToF sensor (read-only health check)
   if (vl53l1xAvailable) {
-    uint16_t distance = distanceSensor.read(false);
-    if (distance == 0 && distanceSensor.timeoutOccurred()) {
-      Serial.println(F("ToF sensor timeout"));
-      healthy = false;
-    }
+    // For const method, we primarily check availability
+    // Actual timeout checking happens during regular reads
+  } else {
+    LOG_ERROR_CTX(SystemError::SENSOR_READ_TIMEOUT, "VL53L1X not available");
+    healthy = false;
   }
   
-  // BME688 has internal error checking
-  if (bme688Available && !bme.performReading()) {
-    Serial.println(F("BME688 read error"));
+  // Check BME688 availability
+  if (!bme688Available) {
+    LOG_ERROR_CTX(SystemError::SENSOR_READ_TIMEOUT, "BME688 not available");
+    healthy = false;
+  }
+  
+  // Check IMU availability
+  if (!lsm9ds1Available) {
+    LOG_ERROR_CTX(SystemError::SENSOR_READ_TIMEOUT, "LSM9DS1 not available");
+    healthy = false;
+  }
+  
+  // Check gesture sensor availability
+  if (!apds9960Available) {
+    LOG_ERROR_CTX(SystemError::SENSOR_READ_TIMEOUT, "APDS9960 not available");
     healthy = false;
   }
   

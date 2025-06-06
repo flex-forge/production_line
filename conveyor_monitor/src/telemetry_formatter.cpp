@@ -1,4 +1,5 @@
 #include "telemetry_formatter.h"
+#include "error_handling.h"
 
 TelemetryFormatter::TelemetryFormatter() {
   // Constructor - no initialization needed
@@ -43,6 +44,7 @@ void TelemetryFormatter::appendBoolField(String& json, const char* fieldName, bo
 
 bool TelemetryFormatter::formatTelemetry(const SystemState& state, char* outputBuffer, size_t bufferSize) const {
   if (outputBuffer == nullptr || bufferSize == 0) {
+    LOG_ERROR(SystemError::INVALID_PARAMETER);
     return false;
   }
   
@@ -72,6 +74,7 @@ bool TelemetryFormatter::formatTelemetry(const SystemState& state, char* outputB
   // Check if the result fits in the output buffer
   if (telemetryStr.length() >= bufferSize) {
     Serial.println(F("ERROR: Telemetry string too large for buffer"));
+    LOG_ERROR(SystemError::BUFFER_OVERFLOW);
     return false;
   }
   

@@ -20,6 +20,7 @@
 #include "notecard_manager.h"
 #include "alert_handler.h"
 #include "telemetry_formatter.h"
+#include "error_handling.h"
 
 // Global objects
 SensorManager sensorManager;
@@ -221,8 +222,14 @@ void performHealthCheck() {
   
   // Check Notecard connectivity
   if (!notecardManager.isConnected()) {
+    LOG_ERROR_CTX(SystemError::NOTECARD_SEND_FAILED, "Notecard disconnected");
     // Try to reconnect
     notecardManager.reconnect();
+  }
+  
+  // Check for critical system errors
+  if (systemErrorHandler.hasCriticalErrors()) {
+    alertHandler.triggerAlert(ALERT_SENSOR_FAILURE, "Critical system errors detected");
   }
   
   // Log system stats
@@ -233,4 +240,11 @@ void performHealthCheck() {
   Serial.print(F("/min, Vib="));
   Serial.print(currentState.vibrationLevel);
   Serial.println(F("g"));
+  
+  // Periodically print error statistics
+  static unsigned long lastErrorReport = 0;
+  if (millis() - lastErrorReport > 300000) { // Every 5 minutes
+    systemErrorHandler.printErrorStats();
+    lastErrorReport = millis();
+  }
 }

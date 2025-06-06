@@ -85,23 +85,23 @@ public:
   // Read all sensors
   void readAll();
   
-  // Get processed values
-  float getConveyorSpeed() { return currentSpeed_rpm; }
-  int getPartsCount();
-  float getVibrationMagnitude() { return vibrationMagnitude; }
-  float getTemperature() { return currentReadings.temperature; }
-  float getHumidity() { return currentReadings.humidity; }
-  float getPressure() { return currentReadings.pressure; }
-  uint32_t getAirQuality() { return currentReadings.gasResistance; }
-  bool isOperatorPresent() { return currentReadings.proximity > 10; }
-  GestureType getLastGesture() { return lastGesture; }
+  // Get processed values (const-correct)
+  float getConveyorSpeed() const { return currentSpeed_rpm; }
+  int getPartsCount() const;
+  float getVibrationMagnitude() const { return vibrationMagnitude; }
+  float getTemperature() const { return currentReadings.temperature; }
+  float getHumidity() const { return currentReadings.humidity; }
+  float getPressure() const { return currentReadings.pressure; }
+  uint32_t getAirQuality() const { return currentReadings.gasResistance; }
+  bool isOperatorPresent() const { return currentReadings.proximity > 10; }
+  GestureType getLastGesture() const { return lastGesture; }
   
   // Get raw sensor data
-  SensorReadings getRawReadings() { return currentReadings; }
+  const SensorReadings& getRawReadings() const { return currentReadings; }
   
   // Utility functions
   void clearGesture() { lastGesture = GESTURE_NONE; }
-  bool checkSensorHealth();
+  bool checkSensorHealth() const;
 };
 
 

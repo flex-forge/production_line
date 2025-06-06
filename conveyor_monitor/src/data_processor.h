@@ -2,58 +2,58 @@
 #define DATA_PROCESSOR_H
 
 #include <Arduino.h>
-#include "config.h"
+#include "data_types.h"
+#include "anomaly_detector.h"
+#include "statistical_analyzer.h"
 
+/**
+ * @brief Main data processing coordinator
+ * 
+ * This class coordinates between statistical analysis and anomaly detection,
+ * providing a unified interface for the main application. It delegates
+ * specialized tasks to the appropriate analyzer classes.
+ */
 class DataProcessor {
 private:
-  // Speed monitoring
-  float speedHistory[10];
-  int speedHistoryIndex;
-  float averageSpeed;
-  float speedVariance;
-  
-  // Jam detection (vibration-based)
-  unsigned long lowVibrationStartTime;
-  bool wasRunning;
-  bool inLowVibrationState;
-  
-  // Vibration analysis
-  float vibrationBaseline;
-  float vibrationHistory[30];
-  int vibrationHistoryIndex;
-  bool baselineEstablished;
-  
-  // Environmental monitoring
-  float tempHistory[10];
-  float humidityHistory[10];
-  int envHistoryIndex;
-  
-  // Statistical functions
-  float calculateMean(float* data, int size);
-  float calculateVariance(float* data, int size, float mean);
-  float calculateTrend(float* data, int size);
+  StatisticalAnalyzer statisticalAnalyzer;
+  AnomalyDetector anomalyDetector;
   
 public:
+  /**
+   * @brief Constructor
+   */
   DataProcessor();
   
+  /**
+   * @brief Initialize the data processor and its components
+   */
   void begin();
+  
+  /**
+   * @brief Update all analysis components with new system state
+   * @param state Current system state
+   */
   void update(const SystemState& state);
   
-  // Anomaly detection
-  bool detectSpeedAnomaly();
-  bool detectJam();
-  bool detectVibrationAnomaly();
-  bool detectEnvironmentalAnomaly();
+  // Anomaly detection interface
+  bool detectSpeedAnomaly() const;
+  bool detectJam() const;
+  bool detectVibrationAnomaly() const;
+  bool detectEnvironmentalAnomaly() const;
   
-  // Get processed metrics
-  float getAverageSpeed() { return averageSpeed; }
-  float getSpeedStability() { return speedVariance; }
-  float getVibrationTrend();
-  bool isJamDetected() { return inLowVibrationState; }
+  // Statistical analysis interface  
+  float getAverageSpeed() const { return statisticalAnalyzer.getAverageSpeed(); }
+  float getSpeedStability() const { return statisticalAnalyzer.getSpeedStability(); }
+  float getVibrationTrend() const { return statisticalAnalyzer.getVibrationTrend(); }
+  bool isJamDetected() const { return anomalyDetector.isJamDetected(); }
   
-  // Get predictions
-  float predictMaintenanceHours();
-  float getEfficiencyScore();
+  // Advanced analytics
+  float predictMaintenanceHours() const { return statisticalAnalyzer.predictMaintenanceHours(); }
+  float getEfficiencyScore() const { return statisticalAnalyzer.getEfficiencyScore(anomalyDetector.isJamDetected()); }
+  
+  // Access to specialized components (if needed)
+  const StatisticalAnalyzer& getStatisticalAnalyzer() const { return statisticalAnalyzer; }
+  const AnomalyDetector& getAnomalyDetector() const { return anomalyDetector; }
 };
 
 #endif // DATA_PROCESSOR_H
