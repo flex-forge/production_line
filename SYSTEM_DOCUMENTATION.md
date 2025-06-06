@@ -92,9 +92,10 @@ The FlexForge Conveyor Monitor is an IoT system that monitors production line co
 
 **Gesture Actions**:
 - **Swipe Up**: Acknowledge/clear jam alerts (30-second window)
-- **Swipe Down**: Pause system monitoring
-- **Wave**: Resume system monitoring  
-- **Swipe Left/Right**: Reserved (no current action)
+- **Swipe Left**: Resume system monitoring
+- **Swipe Right**: Pause system monitoring
+- **Swipe Down**: Reserved (no current action)
+- **Wave**: Reserved (no current action)
 
 ## Data Processing & Calculations
 
@@ -162,13 +163,13 @@ Accelerometer XYZ → Magnitude → RMS Calculation
 | Gesture | Action | Description |
 |---------|--------|-------------|
 | **Swipe Up** | Jam Acknowledgment | Clear jam alerts within 30-second window |
-| **Swipe Down** | Pause Monitoring | Temporarily pause system monitoring |
-| **Wave** | Resume Monitoring | Resume system monitoring after pause |
-| **Swipe Left** | Reserved | No current action assigned |
-| **Swipe Right** | Reserved | No current action assigned |
+| **Swipe Left** | Resume Monitoring | Resume system monitoring after pause |
+| **Swipe Right** | Pause Monitoring | Temporarily pause system monitoring |
+| **Swipe Down** | Reserved | No current action assigned |
+| **Wave** | Reserved | No current action assigned |
 
 #### Gesture Processing
-- **Cooldown**: 2-second minimum between gestures (prevents spam)
+- **Cooldown**: 2-second minimum between gestures (prevents spamming the sensor)
 - **Detection**: Requires clear gesture pattern from APDS9960
 - **Validation**: Automatic gesture clearing after processing
 - **Response**: Immediate cloud event transmission
@@ -178,8 +179,8 @@ Accelerometer XYZ → Magnitude → RMS Calculation
 #### Cloud Events Generated
 1. **`operator.action`** events:
    - `jam_cleared`: Operator acknowledged jam via swipe up
-   - `monitoring_paused`: Operator paused monitoring via swipe down
-   - `monitoring_resumed`: Operator resumed monitoring via wave
+   - `monitoring_paused`: Operator paused monitoring via swipe right
+   - `monitoring_resumed`: Operator resumed monitoring via swipe left
 
 2. **`alert.acknowledged`** events:
    - Automatic when any alert is acknowledged
@@ -201,10 +202,10 @@ Accelerometer XYZ → Magnitude → RMS Calculation
 5. **Resolution**: Alert acknowledged, `jam_cleared` event sent
 
 #### Maintenance Workflow  
-1. **Maintenance Start**: Operator swipes down to pause monitoring
+1. **Maintenance Start**: Operator swipes right to pause monitoring
 2. **Monitoring Paused**: `monitoring_paused` event sent to cloud
 3. **Maintenance Work**: System continues telemetry but suppresses alerts
-4. **Maintenance Complete**: Operator waves to resume monitoring
+4. **Maintenance Complete**: Operator swipes left to resume monitoring
 5. **Monitoring Resumed**: `monitoring_resumed` event sent to cloud
 
 ## Events & Alerts
@@ -279,9 +280,9 @@ Accelerometer XYZ → Magnitude → RMS Calculation
 
 Gesture Testing:
 4. Swipe UP (palm toward sensor, move up) - should see jam acknowledgment event
-5. Swipe DOWN (palm toward sensor, move down) - should see monitoring paused event  
-6. WAVE (move hand toward/away from sensor) - should see monitoring resumed event
-7. Swipe LEFT/RIGHT - should detect gesture but no action
+5. Swipe RIGHT (palm toward sensor, move right) - should see monitoring paused event  
+6. Swipe LEFT (palm toward sensor, move left) - should see monitoring resumed event
+7. Swipe DOWN/WAVE - should detect gesture but no action
 8. Wait 2 seconds between gestures (cooldown period)
 9. Check for operator.action events in cloud output
 ```

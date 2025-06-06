@@ -236,14 +236,14 @@ void handleOperatorInput() {
         }
         break;
         
-      case GESTURE_SWIPE_DOWN:
-        // Pause monitoring
-        notecardManager.sendEvent("operator.action", "{\"action\":\"monitoring_paused\"}");
-        break;
-        
-      case GESTURE_WAVE:
+      case GESTURE_SWIPE_LEFT:
         // Resume monitoring
         notecardManager.sendEvent("operator.action", "{\"action\":\"monitoring_resumed\"}");
+        break;
+        
+      case GESTURE_SWIPE_RIGHT:
+        // Pause monitoring
+        notecardManager.sendEvent("operator.action", "{\"action\":\"monitoring_paused\"}");
         break;
     }
     

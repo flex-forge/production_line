@@ -209,7 +209,7 @@ bool SensorManager::initializeAPDS9960() {
   
   // Configure gesture sensor
   gestureSensor.enableGestureSensor(true);
-  gestureSensor.enableProximitySensor(false);
+  gestureSensor.enableProximitySensor(true);  // Enable proximity for gesture detection
   gestureSensor.setGestureGain(GGAIN_2X);
   gestureSensor.setGestureLEDDrive(LED_DRIVE_25MA);
   
@@ -238,12 +238,13 @@ void SensorManager::readEncoder() {
     // Convert position offset to speed (each detent = 1 RPM increment)
     // Positive offset = faster, negative offset = reverse/slower
     currentSpeed_rpm = positionOffset * 1.0; // 1 RPM per detent
-    
+
     // Clamp speed to reasonable range
     if (currentSpeed_rpm < 0.0) currentSpeed_rpm = 0.0;        // No negative speeds
     if (currentSpeed_rpm > 100.0) currentSpeed_rpm = 100.0;    // Max 100 RPM
-    
+
     // Debug encoder readings
+    /*
     static unsigned long lastEncoderDebug = 0;
     unsigned long currentTime = millis();
     if (currentTime - lastEncoderDebug > 5000) { // Every 5 seconds
@@ -258,7 +259,8 @@ void SensorManager::readEncoder() {
       Serial.println(F(" RPM"));
       lastEncoderDebug = currentTime;
     }
-    
+    */
+
     currentReadings.encoderSpeed = currentSpeed_rpm;
     currentReadings.encoderPulses = encoderPosition;
   } else {
@@ -353,19 +355,24 @@ void SensorManager::readGesture() {
         switch (gesture) {
           case DIR_UP:
             lastGesture = GESTURE_SWIPE_UP;
+            Serial.println(F("Gesture detected: UP"));
             break;
           case DIR_DOWN:
             lastGesture = GESTURE_SWIPE_DOWN;
+            Serial.println(F("Gesture detected: DOWN"));
             break;
           case DIR_LEFT:
             lastGesture = GESTURE_SWIPE_LEFT;
+            Serial.println(F("Gesture detected: LEFT"));
             break;
           case DIR_RIGHT:
             lastGesture = GESTURE_SWIPE_RIGHT;
+            Serial.println(F("Gesture detected: RIGHT"));
             break;
           case DIR_NEAR:
           case DIR_FAR:
             lastGesture = GESTURE_WAVE;
+            Serial.println(F("Gesture detected: WAVE"));
             break;
         }
         lastGestureTime = currentTime;
@@ -376,6 +383,17 @@ void SensorManager::readGesture() {
     uint8_t proximity = 0;
     gestureSensor.readProximity(proximity);
     currentReadings.proximity = proximity;
+    
+    // Periodic proximity debug
+    static unsigned long lastProxDebug = 0;
+    if (millis() - lastProxDebug > 10000) { // Every 10 seconds
+      Serial.print(F("APDS9960 Proximity: "));
+      Serial.print(proximity);
+      Serial.print(F(" (Operator: "));
+      Serial.print(proximity > 10 ? "YES" : "NO");
+      Serial.println(F(")"));
+      lastProxDebug = millis();
+    }
   } else {
     generateVirtualGestureData();
   }
